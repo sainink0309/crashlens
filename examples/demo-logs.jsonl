@@ -1,0 +1,16 @@
+{"trace_id": "trace_001", "timestamp": "2024-01-15T10:00:00Z", "model": "gpt-4", "prompt": "What is 2+2?", "completion_tokens": 5, "cost": 0.0003, "status": "success"}
+{"trace_id": "trace_001", "timestamp": "2024-01-15T10:00:01Z", "model": "gpt-4", "prompt": "What is 2+2?", "completion_tokens": 5, "cost": 0.0003, "status": "success"}
+{"trace_id": "trace_001", "timestamp": "2024-01-15T10:00:02Z", "model": "gpt-4", "prompt": "What is 2+2?", "completion_tokens": 5, "cost": 0.0003, "status": "success"}
+{"trace_id": "trace_002", "timestamp": "2024-01-15T10:05:00Z", "model": "gpt-4", "prompt": "Translate 'hello world' to Spanish", "completion_tokens": 8, "cost": 0.0004, "status": "success"}
+{"trace_id": "trace_003", "timestamp": "2024-01-15T10:10:00Z", "model": "gpt-3.5-turbo", "prompt": "Analyze this complex financial report and provide detailed insights about market trends, risk factors, and investment recommendations based on the quarterly earnings data...", "completion_tokens": 150, "cost": 0.0003, "status": "success"}
+{"trace_id": "trace_004", "timestamp": "2024-01-15T10:15:00Z", "model": "gpt-4", "prompt": "Write a comprehensive analysis of Shakespeare's Hamlet", "completion_tokens": 200, "cost": 0.012, "status": "success"}
+{"trace_id": "trace_005", "timestamp": "2024-01-15T10:20:00Z", "model": "gpt-4", "prompt": "Fix this code: print('hello')", "completion_tokens": 10, "cost": 0.0006, "status": "success"}
+{"trace_id": "trace_006", "timestamp": "2024-01-15T10:25:00Z", "model": "gpt-4", "prompt": "Fix this code: print('hello')", "completion_tokens": 10, "cost": 0.0006, "status": "error"}
+{"trace_id": "trace_006", "timestamp": "2024-01-15T10:25:05Z", "model": "gpt-3.5-turbo", "prompt": "Fix this code: print('hello')", "completion_tokens": 10, "cost": 0.0002, "status": "error"}
+{"trace_id": "trace_006", "timestamp": "2024-01-15T10:25:10Z", "model": "gpt-3.5-turbo-16k", "prompt": "Fix this code: print('hello')", "completion_tokens": 10, "cost": 0.0004, "status": "success"}
+{"trace_id": "trace_007", "timestamp": "2024-01-15T10:30:00Z", "model": "gpt-4", "prompt": "What's the weather like?", "completion_tokens": 15, "cost": 0.0009, "status": "success"}
+{"trace_id": "trace_008", "timestamp": "2024-01-15T10:35:00Z", "model": "gpt-4", "prompt": "Generate a 1000-word essay on climate change", "completion_tokens": 500, "cost": 0.03, "status": "success"}
+{"trace_id": "trace_009", "timestamp": "2024-01-15T10:40:00Z", "model": "gpt-4", "prompt": "Generate a 1000-word essay on climate change", "completion_tokens": 500, "cost": 0.03, "status": "error"}
+{"trace_id": "trace_009", "timestamp": "2024-01-15T10:40:05Z", "model": "gpt-4", "prompt": "Generate a 1000-word essay on climate change", "completion_tokens": 500, "cost": 0.03, "status": "error"}
+{"trace_id": "trace_009", "timestamp": "2024-01-15T10:40:10Z", "model": "gpt-4", "prompt": "Generate a 1000-word essay on climate change", "completion_tokens": 500, "cost": 0.03, "status": "success"}
+{"trace_id": "trace_010", "timestamp": "2024-01-15T10:45:00Z", "model": "gpt-4", "prompt": "Count to 10", "completion_tokens": 20, "cost": 0.0012, "status": "success"} 

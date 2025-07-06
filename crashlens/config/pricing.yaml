@@ -1,0 +1,56 @@
+# CrashLens Pricing Configuration
+# Model pricing per 1K tokens (input + output)
+
+models:
+  # GPT-4 Models
+  gpt-4:
+    input_cost_per_1k: 0.03
+    output_cost_per_1k: 0.06
+    description: "GPT-4 (8K context)"
+  
+  gpt-4-32k:
+    input_cost_per_1k: 0.06
+    output_cost_per_1k: 0.12
+    description: "GPT-4 (32K context)"
+  
+  gpt-4-turbo:
+    input_cost_per_1k: 0.01
+    output_cost_per_1k: 0.03
+    description: "GPT-4 Turbo"
+  
+  # GPT-3.5 Models
+  gpt-3.5-turbo:
+    input_cost_per_1k: 0.0015
+    output_cost_per_1k: 0.002
+    description: "GPT-3.5 Turbo"
+  
+  gpt-3.5-turbo-16k:
+    input_cost_per_1k: 0.003
+    output_cost_per_1k: 0.004
+    description: "GPT-3.5 Turbo (16K context)"
+
+# Detection thresholds
+thresholds:
+  retry_loop:
+    max_retries: 3
+    time_window_minutes: 5
+  
+  gpt4_short:
+    min_tokens_for_gpt4: 100
+    gpt4_cost_multiplier: 20.0
+  
+  fallback_storm:
+    fallback_threshold: 3
+    time_window_minutes: 10
+
+# Waste calculation settings
+waste_calculation:
+  # Multiplier for estimating monthly costs from daily samples
+  monthly_projection_multiplier: 30
+  
+  # Minimum cost threshold to report (in dollars)
+  min_report_cost: 0.001
+  
+  # Severity thresholds
+  high_severity_cost: 0.10
+  medium_severity_cost: 0.01 
