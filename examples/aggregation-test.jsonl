@@ -1,0 +1,6 @@
+{"timestamp": "2024-01-15T10:30:00Z", "trace_id": "trace_123", "route": "/api/chat", "model": "gpt-4", "prompt_tokens": 5, "completion_tokens": 20, "prompt": "What is 2+2?", "completion": "2+2 equals 4."}
+{"timestamp": "2024-01-15T10:31:00Z", "trace_id": "trace_124", "route": "/api/chat", "model": "gpt-4", "prompt_tokens": 3, "completion_tokens": 15, "prompt": "Hello", "completion": "Hi there!"}
+{"timestamp": "2024-01-15T10:32:00Z", "trace_id": "trace_125", "route": "/api/chat", "model": "gpt-4", "prompt_tokens": 4, "completion_tokens": 25, "prompt": "Translate this", "completion": "Translation provided."}
+{"timestamp": "2024-01-15T10:33:00Z", "trace_id": "trace_126", "route": "/api/chat", "model": "claude-3-sonnet", "prompt_tokens": 6, "completion_tokens": 30, "prompt": "Simple question", "completion": "Simple answer."}
+{"timestamp": "2024-01-15T10:34:00Z", "trace_id": "trace_127", "route": "/api/chat", "model": "claude-3-sonnet", "prompt_tokens": 2, "completion_tokens": 18, "prompt": "Yes", "completion": "Yes, indeed."}
+{"timestamp": "2024-01-15T10:35:00Z", "trace_id": "trace_128", "route": "/api/chat", "model": "gpt-4", "prompt_tokens": 7, "completion_tokens": 22, "prompt": "Quick help", "completion": "Here's help."} 

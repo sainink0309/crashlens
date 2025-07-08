@@ -4,6 +4,8 @@ Formats detection results in Markdown format for documentation
 """
 
 from typing import Dict, List, Any
+from datetime import datetime
+from ..utils.pii_scrubber import PIIScrubber
 
 
 class MarkdownFormatter:
@@ -15,59 +17,68 @@ class MarkdownFormatter:
             'medium': '🟡',
             'low': '🟢'
         }
+        self.pii_scrubber = PIIScrubber()
     
-    def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]]) -> str:
+    def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool = False) -> str:
         """Format detections in Markdown output"""
         if not detections:
             return "🔒 CrashLens runs 100% locally. No data leaves your system.\n\n**No token waste patterns detected! Your GPT usage looks efficient.**"
         
         output = []
         output.append("🔒 CrashLens runs 100% locally. No data leaves your system.\n")
+        if summary_only:
+            output.append("> **Summary-only mode:** Prompts, sample inputs, and trace IDs are suppressed for safe internal sharing.\n")
         output.append("# CrashLens Token Waste Report")
         output.append("")
         
+        # Add analysis metadata
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        output.append(f"**Analysis Date:** {current_time}  \n")
+        output.append(f"**Traces Analyzed:** {len(traces):,}  \n")
+        output.append("")
+        
+        # Scrub PII from detections
+        scrubbed_detections = [self.pii_scrubber.scrub_detection(detection) for detection in detections]
+        
+        # Aggregate detections by type
+        aggregated = self._aggregate_detections(scrubbed_detections)
+        
         # Summary table
-        total_waste_cost = sum(d.get('waste_cost', 0) for d in detections)
-        total_waste_tokens = sum(d.get('waste_tokens', 0) for d in detections)
+        total_waste_cost = sum(d.get('waste_cost', 0) for d in scrubbed_detections)
+        total_waste_tokens = sum(d.get('waste_tokens', 0) for d in scrubbed_detections)
+        total_ai_spend = self._calculate_total_ai_spend(traces)
+        
+        # Sanity check: savings shouldn't exceed total spend
+        if total_waste_cost > total_ai_spend * 0.8:  # Cap at 80% of total spend
+            total_waste_cost = total_ai_spend * 0.8
         
         output.append("## Summary")
         output.append("")
         output.append("| Metric | Value |")
         output.append("|--------|-------|")
-        output.append(f"| Total Potential Savings | ${total_waste_cost:.2f} |")
+        output.append(f"| Total AI Spend | ${total_ai_spend:.2f} |")
+        output.append(f"| Total Potential Savings | ${total_waste_cost:.4f} |")
         output.append(f"| Wasted Tokens | {total_waste_tokens:,} |")
-        output.append(f"| Issues Found | {len(detections)} |")
+        output.append(f"| Issues Found | {len(scrubbed_detections)} |")
         output.append(f"| Traces Analyzed | {len(traces)} |")
         output.append("")
         
-        # Group by type
-        by_type = {}
-        for detection in detections:
-            det_type = detection['type']
-            if det_type not in by_type:
-                by_type[det_type] = []
-            by_type[det_type].append(detection)
-        
-        # Format each type
-        for det_type, type_detections in by_type.items():
-            type_name = det_type.replace('_', ' ').title()
-            output.append(f"## {type_name} ({len(type_detections)} issues)")
+        # Format aggregated detections
+        for det_type, group_data in aggregated.items():
+            type_name = group_data['type'].replace('_', ' ').title()
+            output.append(f"## {type_name} ({group_data['count']} issues)")
             output.append("")
             
             # Type summary table
-            type_waste_cost = sum(d.get('waste_cost', 0) for d in type_detections)
-            type_waste_tokens = sum(d.get('waste_tokens', 0) for d in type_detections)
-            
             output.append("| Metric | Value |")
             output.append("|--------|-------|")
-            output.append(f"| Total Waste Cost | ${type_waste_cost:.4f} |")
-            output.append(f"| Total Waste Tokens | {type_waste_tokens:,} |")
+            output.append(f"| Total Waste Cost | ${group_data['total_waste_cost']:.4f} |")
+            output.append(f"| Total Waste Tokens | {group_data['total_waste_tokens']:,} |")
             output.append("")
             
-            # Individual detections
-            for i, detection in enumerate(type_detections, 1):
-                output.append(self._format_detection(detection, i))
-                output.append("")
+            # Aggregated details
+            output.append(self._format_aggregated_detection(group_data, summary_only))
+            output.append("")
         
         # Monthly projection
         if total_waste_cost > 0:
@@ -79,8 +90,83 @@ class MarkdownFormatter:
         
         return "\n".join(output)
     
-    def _format_detection(self, detection: Dict[str, Any], index: int) -> str:
-        """Format a single detection in Markdown"""
+    def _aggregate_detections(self, detections: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """Aggregate detections by type and model"""
+        aggregated = {}
+        
+        for detection in detections:
+            det_type = detection['type']
+            model_used = detection.get('model_used', 'unknown')
+            suggested_model = detection.get('suggested_model', 'unknown')
+            
+            # Create a key that groups by type and model combination
+            if det_type == 'expensive_model_short':
+                key = f"{det_type}_{model_used}_{suggested_model}"
+            else:
+                key = det_type
+            
+            if key not in aggregated:
+                aggregated[key] = {
+                    'type': det_type,
+                    'count': 0,
+                    'total_waste_cost': 0.0,
+                    'total_waste_tokens': 0,
+                    'sample_prompts': [],
+                    'model_used': model_used,
+                    'suggested_model': suggested_model,
+                    'severity': detection.get('severity', 'medium'),
+                    'detections': []
+                }
+            
+            group = aggregated[key]
+            group['count'] += 1
+            group['total_waste_cost'] += detection.get('waste_cost', 0)
+            group['total_waste_tokens'] += detection.get('waste_tokens', 0)
+            group['detections'].append(detection)
+            
+            # Collect sample prompts (up to 3 unique ones)
+            sample_prompt = detection.get('sample_prompt', '')
+            if sample_prompt and sample_prompt not in group['sample_prompts'] and len(group['sample_prompts']) < 3:
+                group['sample_prompts'].append(sample_prompt)
+        
+        return aggregated
+    
+    def _format_aggregated_detection(self, group_data: Dict[str, Any], summary_only: bool = False) -> str:
+        """Format an aggregated detection group in Markdown"""
+        lines = []
+        
+        # Main description
+        if group_data['type'] == 'expensive_model_short':
+            model_used = group_data['model_used'].upper()
+            suggested_model = group_data['suggested_model']
+            lines.append(f"**Issue**: {group_data['count']} traces used {model_used} instead of {suggested_model}")
+        elif group_data['type'] == 'retry_loop':
+            lines.append(f"**Issue**: {group_data['count']} traces with excessive retries")
+        elif group_data['type'] == 'fallback_storm':
+            lines.append(f"**Issue**: {group_data['count']} traces with model fallback storms")
+        else:
+            lines.append(f"**Issue**: {group_data['count']} traces affected")
+        lines.append("")
+        
+        # Sample prompts (suppress in summary_only)
+        if group_data['sample_prompts'] and not summary_only:
+            lines.append("**Sample Prompts**:")
+            for i, prompt in enumerate(group_data['sample_prompts'], 1):
+                lines.append(f"{i}. `{prompt[:50]}{'...' if len(prompt) > 50 else ''}`")
+            lines.append("")
+        
+        # Suggested fix
+        if group_data['type'] == 'expensive_model_short':
+            lines.append(f"**Suggested Fix**: Route short prompts to `{group_data['suggested_model']}`")
+        elif group_data['type'] == 'retry_loop':
+            lines.append("**Suggested Fix**: Implement exponential backoff and circuit breakers")
+        elif group_data['type'] == 'fallback_storm':
+            lines.append("**Suggested Fix**: Optimize model selection logic")
+        
+        return "\n".join(lines)
+
+    def _format_detection(self, detection: Dict[str, Any], index: int, summary_only: bool = False) -> str:
+        """Format a single detection in Markdown (kept for backward compatibility)"""
         severity_emoji = self.severity_colors.get(detection['severity'], '⚪')
         
         lines = []
@@ -113,11 +199,13 @@ class MarkdownFormatter:
                 lines.append(f"- **Model Sequence**: {' → '.join(models)}")
             lines.append(f"- **Time Span**: {detection.get('time_span', 'unknown')}")
         
-        lines.append(f"- **Trace ID**: `{detection.get('trace_id', 'unknown')}`")
-        lines.append("")
+        # Trace ID (suppress in summary_only)
+        if not summary_only:
+            lines.append(f"- **Trace ID**: `{detection.get('trace_id', 'unknown')}`")
+            lines.append("")
         
-        # Sample prompt
-        if detection.get('sample_prompt'):
+        # Sample prompt (suppress in summary_only)
+        if detection.get('sample_prompt') and not summary_only:
             lines.append("**Sample Prompt**:")
             lines.append("```")
             lines.append(detection['sample_prompt'])
@@ -125,3 +213,21 @@ class MarkdownFormatter:
             lines.append("")
         
         return "\n".join(lines) 
+
+    def _calculate_total_ai_spend(self, traces: Dict[str, List[Dict[str, Any]]]) -> float:
+        """Calculate the total cost of all traces using the pricing config"""
+        from ..cli import load_pricing_config
+        pricing_config = load_pricing_config()
+        model_pricing = pricing_config.get('models', {})
+        total = 0.0
+        for records in traces.values():
+            for record in records:
+                model = record.get('model', 'gpt-3.5-turbo')
+                input_tokens = record.get('prompt_tokens', 0)
+                output_tokens = record.get('completion_tokens', 0)
+                model_config = model_pricing.get(model, {})
+                if model_config:
+                    input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
+                    output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
+                    total += input_cost + output_cost
+        return total 

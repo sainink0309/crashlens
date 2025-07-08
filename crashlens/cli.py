@@ -12,7 +12,7 @@ from typing import Optional, Dict, List, Any
 
 from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
-from .detectors.gpt4_short import GPT4ShortDetector
+from .detectors.short_model_detector import ShortModelDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
@@ -33,7 +33,7 @@ def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: Optional[Path] = None, 
-              stdin: bool = False, paste: bool = False, summary: bool = False, output_format: str = 'slack') -> str:
+              stdin: bool = False, paste: bool = False, summary: bool = False, output_format: str = 'slack', summary_only: bool = False, dry_run_policy: bool = False) -> str:
     """
     🎯 Scan logs for token waste patterns
     
@@ -72,7 +72,7 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
             max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
             time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5)
         ),
-        GPT4ShortDetector(
+        ShortModelDetector(
             min_tokens_for_gpt4=thresholds.get('gpt4_short', {}).get('min_tokens_for_gpt4', 200),
             gpt4_cost_multiplier=thresholds.get('gpt4_short', {}).get('gpt4_cost_multiplier', 20.0)
         ),
@@ -84,14 +84,33 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
     
     # Run all detectors
     all_detections = []
+    detector_results = []
     for detector in detectors:
-        detections = detector.detect(traces)
+        if hasattr(detector, 'detect') and 'model_pricing' in detector.detect.__code__.co_varnames:
+            detections = detector.detect(traces, pricing_config.get('models', {}))
+        else:
+            detections = detector.detect(traces)
         all_detections.extend(detections)
+        detector_results.append((detector.__class__.__name__, detections))
+
+    # Handle dry-run-policy mode
+    if dry_run_policy:
+        dry_run_lines = []
+        any_triggered = False
+        for rule_name, detections in detector_results:
+            if detections:
+                dry_run_lines.append(f"[DRY RUN] Detected: {rule_name.replace('Detector','').replace('_',' ')} ({len(detections)} matches)")
+                any_triggered = True
+            else:
+                dry_run_lines.append(f"[DRY RUN] No {rule_name.replace('Detector','').replace('_',' ')} detected")
+        if not any_triggered:
+            return "[DRY RUN] No detection rules would trigger on this data."
+        return "\n".join(dry_run_lines)
     
     # Handle summary mode
     if summary:
         formatter = SummaryFormatter()
-        output = formatter.format(traces, pricing_config.get('models', {}))
+        output = formatter.format(traces, pricing_config.get('models', {}), summary_only=summary_only)
         return output
     
     # Estimate costs using pricing config
@@ -104,7 +123,7 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
         formatter = MarkdownFormatter()
     else:
         formatter = SlackFormatter()
-    output = formatter.format(all_detections, traces)
+    output = formatter.format(all_detections, traces, summary_only=summary_only)
     
     return output
 
@@ -146,7 +165,10 @@ def cli():
 @click.option('--stdin', is_flag=True, help='Read logs from stdin')
 @click.option('--paste', is_flag=True, help='Read logs from clipboard')
 @click.option('--summary', is_flag=True, help='Show cost summary by route, model, and team')
-def scan(log_file: Optional[Path], output_format: str, config: Optional[Path], demo: bool, stdin: bool, paste: bool, summary: bool):
+@click.option('--summary-only', is_flag=True, help='Suppress prompts, sample inputs, and trace IDs for safe internal reports')
+@click.option('--output', type=click.Path(writable=True, path_type=Path), help='Save report to a file instead of printing to stdout')
+@click.option('--dry-run-policy', is_flag=True, help='Show which detection rules would trigger, without blocking or exiting')
+def scan(log_file: Optional[Path], output_format: str, config: Optional[Path], demo: bool, stdin: bool, paste: bool, summary: bool, summary_only: bool, dry_run_policy: bool, output: Optional[Path]):
     """Scan JSONL log file for token waste patterns"""
     
     # Check for conflicts
@@ -161,8 +183,12 @@ def scan(log_file: Optional[Path], output_format: str, config: Optional[Path], d
     
     try:
         # Use the new scan_logs function
-        output = scan_logs(logfile=log_file, demo=demo, config_path=config, stdin=stdin, paste=paste, summary=summary, output_format=output_format)
-        click.echo(output)
+        output_text = scan_logs(logfile=log_file, demo=demo, config_path=config, stdin=stdin, paste=paste, summary=summary, output_format=output_format, summary_only=summary_only, dry_run_policy=dry_run_policy)
+        if output:
+            output.write_text(output_text, encoding='utf-8')
+            click.echo(f"Report saved to {output}")
+        else:
+            click.echo(output_text)
         
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)

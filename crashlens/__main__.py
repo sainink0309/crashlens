@@ -11,7 +11,7 @@ from typing import Optional
 
 from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
-from .detectors.gpt4_short import GPT4ShortDetector
+from .detectors.short_model_detector import ShortModelDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
@@ -46,7 +46,7 @@ def scan(log_file: Path, output_format: str, config: Optional[Path]):
         # Initialize detectors
         detectors = [
             RetryLoopDetector(),
-            GPT4ShortDetector(),
+            ShortModelDetector(),
             FallbackStormDetector()
         ]
         

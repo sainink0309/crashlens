@@ -4,7 +4,7 @@
 
 ## 🚀 What is CrashLens?
 
-CrashLens is a CLI tool that scans Langfuse-style JSONL logs of GPT API usage and detects token waste patterns like retry loops, fallback storms, and inefficient GPT-4 usage. It estimates monthly cost waste and prints Slack-style or Markdown alerts to stdout. All processing is 100% local — no internet access, no SDK, no YAML input required.
+CrashLens is a CLI tool that scans Langfuse-style JSONL logs of GPT API usage and detects token waste patterns like retry loops, fallback storms, and inefficient expensive model usage. It estimates monthly cost waste and prints Slack-style or Markdown alerts to stdout. All processing is 100% local — no internet access, no SDK, no YAML input required.
 
 ## ⚡ Features
 
@@ -12,9 +12,12 @@ CrashLens is a CLI tool that scans Langfuse-style JSONL logs of GPT API usage an
 - **💰 Cost estimation**: Supports GPT-4, GPT-3.5, and Claude models with accurate pricing
 - **📊 Multiple output formats**: Slack-style, Markdown, and cost summary modes
 - **🔒 Privacy-first**: 100% local processing, no data leaves your machine
+- **🛡️ PII Protection**: Automatically scrubs sensitive data from outputs
 - **📥 Flexible input**: File, stdin pipe, or clipboard paste
 - **🎯 Smart suggestions**: Recommends cheaper model alternatives
 - **📈 Monthly projections**: Estimates potential savings over time
+- **📋 Aggregated reporting**: Groups similar issues for cleaner output
+- **🔐 Safe sharing**: Summary-only mode for internal reports
 
 ## 📦 Installation
 
@@ -44,6 +47,9 @@ crashlens scan logs.jsonl --config custom-pricing.yaml
 
 # Output in Markdown format
 crashlens scan logs.jsonl --format markdown
+
+# Safe internal report (no prompts/trace IDs)
+crashlens scan logs.jsonl --summary-only
 ```
 
 #### Piped Input
@@ -64,13 +70,13 @@ grep "gpt-4" logs.jsonl | crashlens scan --stdin
 crashlens scan --paste
 
 # Combine with other options
-crashlens scan --paste --format markdown --summary
+crashlens scan --paste --format markdown --summary-only
 ```
 
 ### Output Modes
 
 #### 1. **Waste Detection Mode** (Default)
-Detects and reports token waste patterns:
+Detects and reports token waste patterns with aggregated summaries:
 ```bash
 crashlens scan logs.jsonl
 ```
@@ -79,6 +85,12 @@ crashlens scan logs.jsonl
 - 🔄 **Retry Loops**: Multiple calls with the same prompt
 - 💎 **Expensive Model Usage**: GPT-4/Claude for simple tasks
 - ⚡ **Fallback Storms**: Multiple model switches in one trace
+
+**Shows:**
+- 🧾 Total AI spend for analyzed period
+- 💰 Potential savings from optimization
+- 📊 Aggregated issues by type and model
+- 🎯 Sample prompts and suggested fixes
 
 #### 2. **Cost Summary Mode**
 Aggregates costs by route, model, and team:
@@ -99,6 +111,12 @@ Generates copy-paste ready reports:
 crashlens scan logs.jsonl --format markdown
 ```
 
+#### 4. **Summary-Only Mode**
+Safe for internal sharing (suppresses prompts and trace IDs):
+```bash
+crashlens scan logs.jsonl --summary-only
+```
+
 ### Command Options
 
 | Option | Description | Example |
@@ -108,6 +126,7 @@ crashlens scan logs.jsonl --format markdown
 | `--paste` | Read from clipboard | `crashlens scan --paste` |
 | `--format` | Output format | `--format markdown` |
 | `--summary` | Cost summary mode | `--summary` |
+| `--summary-only` | Safe internal report | `--summary-only` |
 | `--config` | Custom pricing config | `--config pricing.yaml` |
 | `--demo` | Use sample data | `--demo` |
 
@@ -142,7 +161,7 @@ crashlens/
 ├── cli.py                      # Main Click CLI entrypoint
 ├── detectors/                  # Token waste detection rules
 │   ├── retry_loops.py         # Detects repeated API calls
-│   ├── gpt4_short.py          # Detects expensive model overuse
+│   ├── short_model_detector.py # Detects expensive model overuse
 │   └── fallback_storm.py      # Detects model switching patterns
 ├── parsers/
 │   └── langfuse.py            # JSONL loader, trace grouper by trace_id
@@ -150,10 +169,14 @@ crashlens/
 │   ├── slack_formatter.py     # Emoji-rich Slack-style output
 │   ├── markdown_formatter.py  # Copy-paste ready Markdown reports
 │   └── summary_formatter.py   # Cost aggregation by route/model/team
+├── utils/
+│   └── pii_scrubber.py        # PII detection and scrubbing
 ├── config/
 │   └── pricing.yaml           # Model pricing configuration
 ├── examples/
-│   └── demo-logs.jsonl        # Sample Langfuse-style logs
+│   ├── demo-logs.jsonl        # Sample Langfuse-style logs
+│   ├── aggregation-test.jsonl # Test aggregation functionality
+│   └── pii-test.jsonl         # Test PII scrubbing
 ├── tests/
 │   └── test_rules.py
 ├── README.md
@@ -202,21 +225,26 @@ crashlens scan logs.jsonl
 🔒 CrashLens runs 100% locally. No data leaves your system.
 🚨 **CrashLens Token Waste Report**
 ==================================================
-💰 **Total Potential Savings**: $4.87
-🎯 **Wasted Tokens**: 83,407
-📊 **Issues Found**: 56
+🧾 **Total AI Spend**: $77.84
+💰 **Total Potential Savings**: $62.27
+🎯 **Wasted Tokens**: 1,682,325
+📊 **Issues Found**: 6,629
 
-🔄 **Retry Loop** (4 issues)
-  🟡 Retry loop detected: 5 calls for same prompt
-     💰 Waste: $0.0015
-     🎯 Tokens: 25
-     🔄 Retries: 5
-     ⏱️  Time: 4.0 seconds
-     📄 Sample: What is 2+2?
-     🔗 Trace: trace_001
+💎 **Expensive Model Short** (4,231 issues)
+  • 4,231 traces used GPT-4 instead of gpt-3.5-turbo
+  • Est. waste: $45.23
+  • Sample prompts: "What is 2+2?...", "Hello...", "Translate this..."
+  • Suggested fix: route short prompts to gpt-3.5-turbo
+
+🔄 **Retry Loops** (2,398 issues)
+  • 2,398 traces with excessive retries
+  • Est. waste: $17.04
+  • Suggested fix: implement exponential backoff and circuit breakers
+
+📈 **Monthly Projection**: $1,868.10 potential savings
 ```
 
-### Example 2: Cost Summary
+### Example 2: Cost Summary Mode
 ```bash
 crashlens scan logs.jsonl --summary
 ```
@@ -225,19 +253,22 @@ crashlens scan logs.jsonl --summary
 🔒 CrashLens runs 100% locally. No data leaves your system.
 📊 **CrashLens Cost Summary**
 ==================================================
-💰 **Total Cost**: $0.2161
-🎯 **Total Tokens**: 3,523
-📈 **Total Traces**: 8
+💰 **Total Cost**: $123.45
+🎯 **Total Tokens**: 2,500,000
+📈 **Total Traces**: 1,000
 
-🛣️  **Cost by Route**
-  /api/generate: $0.1200 (55.5%)
-  /api/reports: $0.0480 (22.2%)
-  /api/analyze: $0.0473 (21.9%)
+🛣️ **Cost by Route**
+  /api/chat: $98.76 (80.0%)
+  /api/completions: $24.69 (20.0%)
 
 🤖 **Cost by Model**
-  gpt-4: $0.1683 (77.9%)
-  claude-3-opus: $0.0450 (20.8%)
-  claude-3-sonnet: $0.0023 (1.1%)
+  gpt-4: $74.07 (60.0%)
+  gpt-3.5-turbo: $49.38 (40.0%)
+
+👥 **Cost by Team**
+  engineering: $61.73 (50.0%)
+  marketing: $37.04 (30.0%)
+  sales: $24.68 (20.0%)
 ```
 
 ### Example 3: Markdown Report
@@ -254,37 +285,107 @@ crashlens scan logs.jsonl --format markdown
 
 | Metric | Value |
 |--------|-------|
-| Total Potential Savings | $4.87 |
-| Wasted Tokens | 83,407 |
-| Issues Found | 56 |
+| Total AI Spend | $77.84 |
+| Total Potential Savings | $62.27 |
+| Wasted Tokens | 1,682,325 |
+| Issues Found | 6,629 |
+| Traces Analyzed | 1,000 |
 
-## Retry Loop (4 issues)
+## Expensive Model Short (4,231 issues)
 
-### 🟡 Issue #1
-**Description**: Retry loop detected: 5 calls for same prompt
-- **Waste Cost**: $0.0015
-- **Waste Tokens**: 25
-- **Retry Count**: 5
-- **Time Span**: 4.0 seconds
-- **Trace ID**: `trace_001`
+| Metric | Value |
+|--------|-------|
+| Total Waste Cost | $45.23 |
+| Total Waste Tokens | 1,200,000 |
+
+**Issue**: 4,231 traces used GPT-4 instead of gpt-3.5-turbo
+
+**Sample Prompts**:
+1. `What is 2+2?...`
+2. `Hello...`
+3. `Translate this...`
+
+**Suggested Fix**: Route short prompts to `gpt-3.5-turbo`
 ```
 
-## 🚀 Quick Start
+### Example 4: Safe Internal Report
+```bash
+crashlens scan logs.jsonl --summary-only
+```
+**Output:**
+```
+🔒 CrashLens runs 100% locally. No data leaves your system.
+📝 Summary-only mode: Prompts, sample inputs, and trace IDs are suppressed for safe internal sharing.
+🚨 **CrashLens Token Waste Report**
+==================================================
+🧾 **Total AI Spend**: $77.84
+💰 **Total Potential Savings**: $62.27
+🎯 **Wasted Tokens**: 1,682,325
+📊 **Issues Found**: 6,629
 
-1. **Install**: `poetry install`
-2. **Test**: `crashlens scan examples/demo-logs.jsonl`
-3. **Analyze your logs**: `crashlens scan your-logs.jsonl`
-4. **Get summary**: `crashlens scan your-logs.jsonl --summary`
-5. **Generate report**: `crashlens scan your-logs.jsonl --format markdown`
+💎 **Expensive Model Short** (4,231 issues)
+  • 4,231 traces used GPT-4 instead of gpt-3.5-turbo
+  • Est. waste: $45.23
+  • Suggested fix: route short prompts to gpt-3.5-turbo
+```
 
-## 📝 License
+## 🔒 Privacy & Security
 
-MIT License. See [LICENSE](LICENSE).
+### PII Protection
+CrashLens automatically scrubs sensitive information from outputs:
+- **Removed fields**: `user_id`, `email`, `phone`, `api_key`, `password`, etc.
+- **Masked patterns**: Email addresses, phone numbers, credit cards, SSNs, IPs, UUIDs
+- **Safe metadata**: Recursively cleans nested metadata objects
 
-## 🙏 Acknowledgements
+### Local Processing
+- **No internet access**: All processing happens on your machine
+- **No data transmission**: Logs never leave your system
+- **No external dependencies**: Works offline with just Python
 
-- Inspired by Langfuse, OpenAI, and the GPT developer community.
+## 🎯 Detection Rules
 
----
+### 1. Expensive Model Short Detector
+**Triggers when:** Expensive models (GPT-4, Claude-3-Opus) used for short prompts
+**Threshold:** Configurable minimum tokens (default: 100)
+**Suggestion:** Route to cheaper alternatives (GPT-3.5-Turbo, Claude-3-Haiku)
 
-*CrashLens is a trust-first CLI tool designed to run offline and help you optimize your AI costs in 60 seconds.* 
+### 2. Retry Loop Detector
+**Triggers when:** Same prompt called multiple times in short period
+**Threshold:** Configurable retry count and time window
+**Suggestion:** Implement exponential backoff and circuit breakers
+
+### 3. Fallback Storm Detector
+**Triggers when:** Multiple model switches in single trace
+**Threshold:** Configurable fallback count and time window
+**Suggestion:** Optimize model selection logic
+
+## 📊 Aggregation & Reporting
+
+### Smart Aggregation
+- **Groups similar issues**: Combines identical waste patterns
+- **Shows sample prompts**: Up to 3 unique examples per group
+- **Consolidated metrics**: Total counts, costs, and tokens per group
+- **Actionable summaries**: Clear suggested fixes for each pattern
+
+### Output Formats
+- **Slack-style**: Emoji-rich, compact summaries for team chat
+- **Markdown**: Copy-paste ready reports for documentation
+- **Summary-only**: Safe for internal sharing (no sensitive data)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- Inspired by the need for better GPT API cost monitoring
+- Built with privacy and simplicity in mind
+- Thanks to the open source community for the tools that made this possible 
