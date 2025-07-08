@@ -1,6 +1,6 @@
 # CrashLens
 
-> Detect token waste patterns in GPT API logs. Offline, fast, and privacy-first.
+> Detect token waste patterns in LLM API logs. Offline, fast, and privacy-first.
 
 ## 🚀 What is CrashLens?
 
