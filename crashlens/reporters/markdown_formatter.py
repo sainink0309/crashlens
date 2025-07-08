@@ -19,9 +19,10 @@ class MarkdownFormatter:
     def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]]) -> str:
         """Format detections in Markdown output"""
         if not detections:
-            return "# CrashLens Report\n\n✅ No token waste patterns detected! Your GPT usage looks efficient."
+            return "🔒 CrashLens runs 100% locally. No data leaves your system.\n\n**No token waste patterns detected! Your GPT usage looks efficient.**"
         
         output = []
+        output.append("🔒 CrashLens runs 100% locally. No data leaves your system.\n")
         output.append("# CrashLens Token Waste Report")
         output.append("")
         

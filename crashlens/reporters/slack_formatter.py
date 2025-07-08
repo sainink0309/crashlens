@@ -19,15 +19,17 @@ class SlackFormatter:
         self.type_emojis = {
             'retry_loop': '🔄',
             'gpt4_short': '💎',
+            'expensive_model_short': '💎',
             'fallback_storm': '⚡'
         }
     
     def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]]) -> str:
         """Format detections in Slack-style output"""
         if not detections:
-            return "✅ No token waste patterns detected! Your GPT usage looks efficient."
+            return "🔒 CrashLens runs 100% locally. No data leaves your system.\n✅ No token waste patterns detected! Your GPT usage looks efficient."
         
         output = []
+        output.append("🔒 CrashLens runs 100% locally. No data leaves your system.")
         output.append("🚨 **CrashLens Token Waste Report**")
         output.append("=" * 50)
         
@@ -87,7 +89,7 @@ class SlackFormatter:
             lines.append(f"     🔄 Retries: {detection.get('retry_count', 0)}")
             lines.append(f"     ⏱️  Time: {detection.get('time_span', 'unknown')}")
         
-        elif detection['type'] == 'gpt4_short':
+        elif detection['type'] in ['gpt4_short', 'expensive_model_short']:
             lines.append(f"     📝 Prompt length: {detection.get('prompt_length', 0)} tokens")
             lines.append(f"     🤖 Model: {detection.get('model_used', 'unknown')}")
             lines.append(f"     💡 Suggested: {detection.get('suggested_model', 'gpt-3.5-turbo')}")

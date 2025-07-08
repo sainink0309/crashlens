@@ -16,6 +16,7 @@ from .detectors.gpt4_short import GPT4ShortDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
+from .reporters.summary_formatter import SummaryFormatter
 
 
 def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -31,7 +32,8 @@ def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         return {}
 
 
-def scan_logs(logfile: Path, demo: bool = False, config_path: Optional[Path] = None) -> str:
+def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: Optional[Path] = None, 
+              stdin: bool = False, paste: bool = False, summary: bool = False, output_format: str = 'slack') -> str:
     """
     🎯 Scan logs for token waste patterns
     
@@ -44,10 +46,23 @@ def scan_logs(logfile: Path, demo: bool = False, config_path: Optional[Path] = N
     
     # Initialize parser and load logs
     parser = LangfuseParser()
-    traces = parser.parse_file(logfile)
+    
+    if stdin:
+        traces = parser.parse_stdin()
+    elif paste:
+        import pyperclip
+        try:
+            text = pyperclip.paste()
+            traces = parser.parse_string(text)
+        except Exception as e:
+            return f"❌ Error reading from clipboard: {e}"
+    elif logfile:
+        traces = parser.parse_file(logfile)
+    else:
+        return "❌ Error: No input source specified"
     
     if not traces:
-        return "⚠️  No traces found in log file"
+        return "⚠️  No traces found in input"
     
     # Initialize detectors with config thresholds
     thresholds = pricing_config.get('thresholds', {})
@@ -73,13 +88,22 @@ def scan_logs(logfile: Path, demo: bool = False, config_path: Optional[Path] = N
         detections = detector.detect(traces)
         all_detections.extend(detections)
     
+    # Handle summary mode
+    if summary:
+        formatter = SummaryFormatter()
+        output = formatter.format(traces, pricing_config.get('models', {}))
+        return output
+    
     # Estimate costs using pricing config
     if pricing_config.get('models'):
         for detection in all_detections:
             detection['estimated_cost'] = estimate_detection_cost(detection, pricing_config['models'])
     
-    # Format output using Slack formatter
-    formatter = SlackFormatter()
+    # Format output using selected formatter
+    if output_format == 'markdown':
+        formatter = MarkdownFormatter()
+    else:
+        formatter = SlackFormatter()
     output = formatter.format(all_detections, traces)
     
     return output
@@ -112,19 +136,32 @@ def cli():
 
 
 @cli.command()
-@click.argument('log_file', type=click.Path(exists=True, path_type=Path))
+@click.argument('log_file', type=click.Path(exists=True, path_type=Path), required=False)
 @click.option('--format', '-f', 'output_format', 
               type=click.Choice(['slack', 'markdown'], case_sensitive=False),
               default='slack', help='Output format')
 @click.option('--config', '-c', type=click.Path(exists=True, path_type=Path),
               help='Path to pricing config file')
 @click.option('--demo', is_flag=True, help='Run in demo mode with sample data')
-def scan(log_file: Path, output_format: str, config: Optional[Path], demo: bool):
+@click.option('--stdin', is_flag=True, help='Read logs from stdin')
+@click.option('--paste', is_flag=True, help='Read logs from clipboard')
+@click.option('--summary', is_flag=True, help='Show cost summary by route, model, and team')
+def scan(log_file: Optional[Path], output_format: str, config: Optional[Path], demo: bool, stdin: bool, paste: bool, summary: bool):
     """Scan JSONL log file for token waste patterns"""
+    
+    # Check for conflicts
+    if (stdin or paste) and log_file:
+        raise click.UsageError("Cannot use file input with --stdin or --paste.")
+    
+    if stdin and paste:
+        raise click.UsageError("Cannot use both --stdin and --paste.")
+    
+    if not log_file and not stdin and not paste:
+        raise click.UsageError("Must specify either a log file, --stdin, or --paste.")
     
     try:
         # Use the new scan_logs function
-        output = scan_logs(log_file, demo=demo, config_path=config)
+        output = scan_logs(logfile=log_file, demo=demo, config_path=config, stdin=stdin, paste=paste, summary=summary, output_format=output_format)
         click.echo(output)
         
     except Exception as e:

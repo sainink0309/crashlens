@@ -28,6 +28,37 @@ models:
     input_cost_per_1k: 0.003
     output_cost_per_1k: 0.004
     description: "GPT-3.5 Turbo (16K context)"
+  
+  # Claude Models
+  claude-3-opus:
+    input_cost_per_1k: 0.015
+    output_cost_per_1k: 0.075
+    description: "Claude 3 Opus"
+  
+  claude-3-sonnet:
+    input_cost_per_1k: 0.003
+    output_cost_per_1k: 0.015
+    description: "Claude 3 Sonnet"
+  
+  claude-3-haiku:
+    input_cost_per_1k: 0.00025
+    output_cost_per_1k: 0.00125
+    description: "Claude 3 Haiku"
+  
+  claude-2.1:
+    input_cost_per_1k: 0.008
+    output_cost_per_1k: 0.024
+    description: "Claude 2.1"
+  
+  claude-2.0:
+    input_cost_per_1k: 0.008
+    output_cost_per_1k: 0.024
+    description: "Claude 2.0"
+  
+  claude-instant-1:
+    input_cost_per_1k: 0.00163
+    output_cost_per_1k: 0.00551
+    description: "Claude Instant 1"
 
 # Detection thresholds
 thresholds:
@@ -38,6 +69,15 @@ thresholds:
   gpt4_short:
     min_tokens_for_gpt4: 100
     gpt4_cost_multiplier: 20.0
+    # Models considered expensive for short prompts
+    expensive_models:
+      - gpt-4
+      - gpt-4-32k
+      - gpt-4-turbo
+      - claude-3-opus
+      - claude-3-sonnet
+      - claude-2.1
+      - claude-2.0
   
   fallback_storm:
     fallback_threshold: 3

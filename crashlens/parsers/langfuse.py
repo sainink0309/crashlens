@@ -20,23 +20,41 @@ class LangfuseParser:
         self.traces.clear()
         
         with open(file_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
+            return self._parse_lines(f)
+    
+    def parse_string(self, text: str) -> Dict[str, List[Dict[str, Any]]]:
+        """Parse JSONL string and group by trace_id"""
+        self.traces.clear()
+        
+        lines = text.splitlines()
+        return self._parse_lines(lines)
+    
+    def parse_stdin(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Parse JSONL from stdin and group by trace_id"""
+        self.traces.clear()
+        
+        import sys
+        return self._parse_lines(sys.stdin)
+    
+    def _parse_lines(self, lines) -> Dict[str, List[Dict[str, Any]]]:
+        """Parse lines and group by trace_id"""
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
+            
+            try:
+                record = json.loads(line)
+                trace_id = record.get('trace_id')
                 
-                try:
-                    record = json.loads(line)
-                    trace_id = record.get('trace_id')
+                if trace_id:
+                    if trace_id not in self.traces:
+                        self.traces[trace_id] = []
+                    self.traces[trace_id].append(record)
                     
-                    if trace_id:
-                        if trace_id not in self.traces:
-                            self.traces[trace_id] = []
-                        self.traces[trace_id].append(record)
-                        
-                except json.JSONDecodeError as e:
-                    print(f"⚠️  Warning: Invalid JSON on line {line_num}: {e}")
-                    continue
+            except json.JSONDecodeError as e:
+                print(f"⚠️  Warning: Invalid JSON on line {line_num}: {e}")
+                continue
         
         return self.traces
     
