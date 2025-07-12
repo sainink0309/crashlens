@@ -50,7 +50,7 @@ class RetryLoopDetector:
         
         for record in records:
             prompt = record.get('prompt', '')
-            timestamp = record.get('timestamp')
+            timestamp = record.get('startTime')
             
             if not prompt or not timestamp:
                 continue
@@ -66,7 +66,7 @@ class RetryLoopDetector:
             should_add = True
             
             for existing_record in groups[prompt_hash]:
-                existing_time = datetime.fromisoformat(existing_record['timestamp'].replace('Z', '+00:00'))
+                existing_time = datetime.fromisoformat(existing_record['startTime'].replace('Z', '+00:00'))
                 if abs((record_time - existing_time).total_seconds()) <= self.time_window.total_seconds():
                     should_add = True
                     break
@@ -84,7 +84,7 @@ class RetryLoopDetector:
         timestamps = []
         for record in records:
             try:
-                ts = datetime.fromisoformat(record['timestamp'].replace('Z', '+00:00'))
+                ts = datetime.fromisoformat(record['startTime'].replace('Z', '+00:00'))
                 timestamps.append(ts)
             except (KeyError, ValueError):
                 continue

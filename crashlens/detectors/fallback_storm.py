@@ -55,7 +55,7 @@ class FallbackStormDetector:
             return []
         
         # Sort records by timestamp
-        sorted_records = sorted(records, key=lambda r: r.get('timestamp', ''))
+        sorted_records = sorted(records, key=lambda r: r.get('startTime', ''))
         
         fallback_groups = []
         current_group = []
@@ -66,9 +66,9 @@ class FallbackStormDetector:
                 continue
             
             # Check if this record is within time window and shows model change
-            current_time = datetime.fromisoformat(record['timestamp'].replace('Z', '+00:00'))
+            current_time = datetime.fromisoformat(record['startTime'].replace('Z', '+00:00'))
             last_record = current_group[-1]
-            last_time = datetime.fromisoformat(last_record['timestamp'].replace('Z', '+00:00'))
+            last_time = datetime.fromisoformat(last_record['startTime'].replace('Z', '+00:00'))
             
             time_diff = abs((current_time - last_time).total_seconds())
             current_model = record.get('model', '')
@@ -113,7 +113,7 @@ class FallbackStormDetector:
         timestamps = []
         for record in records:
             try:
-                ts = datetime.fromisoformat(record['timestamp'].replace('Z', '+00:00'))
+                ts = datetime.fromisoformat(record['startTime'].replace('Z', '+00:00'))
                 timestamps.append(ts)
             except (KeyError, ValueError):
                 continue

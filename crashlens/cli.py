@@ -14,6 +14,7 @@ from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
 from .detectors.short_model_detector import ShortModelDetector
 from .detectors.fallback_storm import FallbackStormDetector
+from .detectors.fallback_failure import FallbackFailureDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
 from .reporters.summary_formatter import SummaryFormatter
@@ -79,6 +80,10 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
         FallbackStormDetector(
             fallback_threshold=thresholds.get('fallback_storm', {}).get('fallback_threshold', 3),
             time_window_minutes=thresholds.get('fallback_storm', {}).get('time_window_minutes', 10)
+        ),
+        FallbackFailureDetector(
+            time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 15),
+            similarity_threshold=thresholds.get('fallback_failure', {}).get('similarity_threshold', 0.8)
         )
     ]
     

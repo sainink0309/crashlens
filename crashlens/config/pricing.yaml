@@ -82,6 +82,10 @@ thresholds:
   fallback_storm:
     fallback_threshold: 3
     time_window_minutes: 10
+  
+  fallback_failure:
+    time_window_seconds: 15
+    similarity_threshold: 0.8
 
 # Waste calculation settings
 waste_calculation:

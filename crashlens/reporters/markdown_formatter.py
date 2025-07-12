@@ -144,6 +144,8 @@ class MarkdownFormatter:
             lines.append(f"**Issue**: {group_data['count']} traces with excessive retries")
         elif group_data['type'] == 'fallback_storm':
             lines.append(f"**Issue**: {group_data['count']} traces with model fallback storms")
+        elif group_data['type'] == 'fallback_failure':
+            lines.append(f"**Issue**: {group_data['count']} traces with unnecessary fallback calls")
         else:
             lines.append(f"**Issue**: {group_data['count']} traces affected")
         lines.append("")
@@ -162,6 +164,8 @@ class MarkdownFormatter:
             lines.append("**Suggested Fix**: Implement exponential backoff and circuit breakers")
         elif group_data['type'] == 'fallback_storm':
             lines.append("**Suggested Fix**: Optimize model selection logic")
+        elif group_data['type'] == 'fallback_failure':
+            lines.append("**Suggested Fix**: Remove redundant fallback calls after successful cheaper model calls")
         
         return "\n".join(lines)
 
@@ -198,6 +202,13 @@ class MarkdownFormatter:
             if models:
                 lines.append(f"- **Model Sequence**: {' → '.join(models)}")
             lines.append(f"- **Time Span**: {detection.get('time_span', 'unknown')}")
+        
+        elif detection['type'] == 'fallback_failure':
+            lines.append(f"- **Primary Model**: {detection.get('primary_model', 'unknown')}")
+            lines.append(f"- **Fallback Model**: {detection.get('fallback_model', 'unknown')}")
+            lines.append(f"- **Time Between Calls**: {detection.get('time_between_calls', 'unknown')}")
+            if not summary_only:
+                lines.append(f"- **Primary Prompt**: `{detection.get('primary_prompt', '')[:50]}{'...' if len(detection.get('primary_prompt', '')) > 50 else ''}`")
         
         # Trace ID (suppress in summary_only)
         if not summary_only:

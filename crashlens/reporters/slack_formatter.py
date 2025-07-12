@@ -22,7 +22,8 @@ class SlackFormatter:
             'retry_loop': '🔄',
             'gpt4_short': '💎',
             'expensive_model_short': '💎',
-            'fallback_storm': '⚡'
+            'fallback_storm': '⚡',
+            'fallback_failure': '📢'
         }
         
         self.pii_scrubber = PIIScrubber()
@@ -136,6 +137,8 @@ class SlackFormatter:
             lines.append(f"  • {group_data['count']} traces with excessive retries")
         elif group_data['type'] == 'fallback_storm':
             lines.append(f"  • {group_data['count']} traces with model fallback storms")
+        elif group_data['type'] == 'fallback_failure':
+            lines.append(f"  • {group_data['count']} traces with unnecessary fallback calls")
         else:
             lines.append(f"  • {group_data['count']} traces affected")
         
@@ -157,6 +160,8 @@ class SlackFormatter:
             lines.append("  • Suggested fix: implement exponential backoff and circuit breakers")
         elif group_data['type'] == 'fallback_storm':
             lines.append("  • Suggested fix: optimize model selection logic")
+        elif group_data['type'] == 'fallback_failure':
+            lines.append("  • Suggested fix: remove redundant fallback calls after successful cheaper model calls")
         
         return "\n".join(lines)
     
@@ -190,6 +195,13 @@ class SlackFormatter:
             if models:
                 lines.append(f"     🔄 Models: {' → '.join(models)}")
             lines.append(f"     ⏱️  Time: {detection.get('time_span', 'unknown')}")
+        
+        elif detection['type'] == 'fallback_failure':
+            lines.append(f"     📢 Primary: {detection.get('primary_model', 'unknown')} → Fallback: {detection.get('fallback_model', 'unknown')}")
+            lines.append(f"     💰 Waste: ${detection.get('waste_cost', 0):.4f}")
+            lines.append(f"     ⏱️  Time between: {detection.get('time_between_calls', 'unknown')}")
+            if not summary_only:
+                lines.append(f"     📝 Primary prompt: {detection.get('primary_prompt', '')[:50]}...")
         
         # Sample prompt (suppress in summary_only)
         if detection.get('sample_prompt') and not summary_only:

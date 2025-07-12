@@ -29,8 +29,11 @@ cd crashlens
 # Install dependencies with Poetry
 poetry install
 
+# Activate the Poetry shell
+poetry shell
+
 # Run the tool
-poetry run crashlens scan examples/demo-logs.jsonl
+crashlens scan examples/demo-logs.jsonl
 ```
 
 ## 🛠️ Usage
@@ -39,7 +42,7 @@ poetry run crashlens scan examples/demo-logs.jsonl
 
 #### File Input
 ```bash
-# Analyze a log file
+# Analyze a log file (includes pricing by default)
 crashlens scan logs.jsonl
 
 # With custom pricing config
@@ -127,7 +130,7 @@ crashlens scan logs.jsonl --summary-only
 | `--format` | Output format | `--format markdown` |
 | `--summary` | Cost summary mode | `--summary` |
 | `--summary-only` | Safe internal report | `--summary-only` |
-| `--config` | Custom pricing config | `--config pricing.yaml` |
+| `--config` | Custom pricing config (uses built-in by default) | `--config pricing.yaml` |
 | `--demo` | Use sample data | `--demo` |
 
 ### Input Data Format
@@ -186,6 +189,18 @@ crashlens/
 ```
 
 ## 🔧 Configuration
+
+### Automatic Pricing
+
+CrashLens now includes pricing configuration by default! Every scan automatically calculates:
+
+- **Total AI Spend**: Complete cost of all API calls
+- **Total Tokens**: Combined input and output tokens
+- **Total Traces**: Number of unique trace IDs
+- **Model Usage Breakdown**: Cost per model with call counts
+- **Waste Percentage**: Percentage of spend that's wasted
+
+No need to specify `--config` unless you want to use custom pricing.
 
 ### Model Pricing
 
