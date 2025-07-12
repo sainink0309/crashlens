@@ -1,10 +1,10 @@
 # CrashLens
 
-> Detect token waste patterns in GPT API logs. Offline, fast, and privacy-first.
+> Detect token waste patterns in LLM API logs. Offline, fast, and privacy-first.
 
 ## 🚀 What is CrashLens?
 
-CrashLens is a CLI tool that scans Langfuse-style JSONL logs of GPT API usage and detects token waste patterns like retry loops, fallback storms, and inefficient expensive model usage. It estimates monthly cost waste and prints Slack-style or Markdown alerts to stdout. All processing is 100% local — no internet access, no SDK, no YAML input required.
+CrashLens is a CLI tool that scans Langfuse-style JSONL logs of LLM API usage and detects token waste patterns like retry loops, fallback storms, and inefficient expensive model usage. It estimates monthly cost waste and prints Slack-style or Markdown alerts to stdout. All processing is 100% local — no internet access, no SDK, no YAML input required.
 
 ## ⚡ Features
 
