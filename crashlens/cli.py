@@ -12,9 +12,9 @@ from typing import Optional, Dict, List, Any
 
 from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
-from .detectors.short_model_detector import ShortModelDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .detectors.fallback_failure import FallbackFailureDetector
+from .detectors.overkill_model_detector import OverkillModelDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
 from .reporters.summary_formatter import SummaryFormatter
@@ -67,29 +67,59 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
     
     # Initialize detectors with config thresholds
     thresholds = pricing_config.get('thresholds', {})
-    
+
+    fallback_detector = FallbackFailureDetector(
+        time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 15),
+        similarity_threshold=thresholds.get('fallback_failure', {}).get('similarity_threshold', 0.8)
+    )
+    overkill_detector = OverkillModelDetector()
+    # Other detectors can be added here as needed
+
+    # Run fallback failure detector first
+    fallback_detections = fallback_detector.detect(traces, pricing_config.get('models', {}))
+    # Add waste_cost and waste_tokens to fallback detections
+    for det in fallback_detections:
+        waste_tokens = 0
+        waste_cost = 0.0
+        for rec in det.get('records', []):
+            waste_tokens += rec.get('completion_tokens', 0)
+            model = rec.get('model', 'gpt-3.5-turbo')
+            input_tokens = rec.get('prompt_tokens', 0)
+            output_tokens = rec.get('completion_tokens', 0)
+            model_config = pricing_config.get('models', {}).get(model, {})
+            if model_config:
+                input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
+                output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
+                waste_cost += input_cost + output_cost
+        det['waste_tokens'] = waste_tokens
+        det['waste_cost'] = waste_cost
+
+    fallback_trace_ids = {d['trace_id'] for d in fallback_detections}
+
+    # Run overkill detector only on traces without fallback failures
+    traces_without_fallback = {tid: recs for tid, recs in traces.items() if tid not in fallback_trace_ids}
+    overkill_detections = overkill_detector.detect(traces_without_fallback, pricing_config.get('models', {}))
+
+    # Run other detectors as before (if needed)
     detectors = [
         RetryLoopDetector(
             max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
             time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5)
         ),
-        ShortModelDetector(
-            min_tokens_for_gpt4=thresholds.get('gpt4_short', {}).get('min_tokens_for_gpt4', 200),
-            gpt4_cost_multiplier=thresholds.get('gpt4_short', {}).get('gpt4_cost_multiplier', 20.0)
-        ),
         FallbackStormDetector(
             fallback_threshold=thresholds.get('fallback_storm', {}).get('fallback_threshold', 3),
             time_window_minutes=thresholds.get('fallback_storm', {}).get('time_window_minutes', 10)
-        ),
-        FallbackFailureDetector(
-            time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 15),
-            similarity_threshold=thresholds.get('fallback_failure', {}).get('similarity_threshold', 0.8)
         )
     ]
-    
-    # Run all detectors
+
     all_detections = []
     detector_results = []
+    # Add prioritized detectors first
+    all_detections.extend(fallback_detections)
+    detector_results.append(("FallbackFailureDetector", fallback_detections))
+    all_detections.extend(overkill_detections)
+    detector_results.append(("OverkillModelDetector", overkill_detections))
+    # Add other detectors
     for detector in detectors:
         if hasattr(detector, 'detect') and 'model_pricing' in detector.detect.__code__.co_varnames:
             detections = detector.detect(traces, pricing_config.get('models', {}))
