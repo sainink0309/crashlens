@@ -58,8 +58,7 @@ class SlackFormatter:
         total_ai_spend = self._calculate_total_ai_spend(traces)
         
         # Sanity check: savings shouldn't exceed total spend
-        if total_waste_cost > total_ai_spend * 0.8:  # Cap at 80% of total spend
-            total_waste_cost = total_ai_spend * 0.8
+        total_waste_cost = min(total_waste_cost, total_ai_spend)
         
         output.append(f"🧾 **Total AI Spend**: ${total_ai_spend:.2f}")
         output.append(f"💰 **Total Potential Savings**: ${total_waste_cost:.4f}")

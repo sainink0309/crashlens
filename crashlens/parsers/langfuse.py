@@ -5,7 +5,7 @@ Parses Langfuse-style JSONL logs and groups by trace_id
 
 import json
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 
@@ -33,7 +33,7 @@ class LangfuseParser:
         import sys
         return self._parse_lines(sys.stdin)
 
-    def _extract_fields(self, record: dict) -> dict:
+    def _extract_fields(self, record: dict) -> 'Optional[dict]':
         # Only process if type == 'generation'
         if record.get('type') != 'generation':
             return None
@@ -44,10 +44,10 @@ class LangfuseParser:
             'startTime': record.get('startTime'),
             'endTime': record.get('endTime'),
             'level': record.get('level'),
-            'input.model': record.get('input', {}).get('model'),
-            'input.prompt': record.get('input', {}).get('prompt'),
-            'usage.prompt_tokens': record.get('usage', {}).get('prompt_tokens'),
-            'usage.completion_tokens': record.get('usage', {}).get('completion_tokens'),
+            'model': record.get('input', {}).get('model'),
+            'prompt': record.get('input', {}).get('prompt'),
+            'prompt_tokens': record.get('usage', {}).get('prompt_tokens'),
+            'completion_tokens': record.get('usage', {}).get('completion_tokens'),
             'metadata.fallback_attempted': record.get('metadata', {}).get('fallback_attempted'),
             'metadata.fallback_reason': record.get('metadata', {}).get('fallback_reason'), # optional
             'name': record.get('name'), # optional

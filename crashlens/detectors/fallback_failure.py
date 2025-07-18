@@ -3,7 +3,7 @@ Fallback Failure Detector
 Detects redundant fallback calls to expensive models after successful cheaper model calls
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import difflib
 
@@ -40,11 +40,11 @@ class FallbackFailureDetector:
                 failure['trace_id'] = trace_id
                 detections.append(failure)
         
-        return detections
+        return [d for d in detections if d is not None]
     
     def _find_fallback_failures(self, records: List[Dict[str, Any]], model_pricing: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """Find fallback failure patterns in sorted records"""
-        failures = []
+        failures: List[Dict[str, Any]] = []
         
         for i in range(len(records) - 1):
             first_record = records[i]
@@ -53,46 +53,52 @@ class FallbackFailureDetector:
             # Check if this is a fallback failure pattern
             if self._is_fallback_failure(first_record, second_record):
                 failure = self._create_failure_detection(first_record, second_record, model_pricing)
-                if failure:
+                if failure is not None:
                     failures.append(failure)
         
-        return failures
+        return [f for f in failures if f is not None]
     
     def _is_fallback_failure(self, first_record: Dict[str, Any], second_record: Dict[str, Any]) -> bool:
         """Check if two records represent a fallback failure pattern"""
         # Extract key fields
-        first_model = first_record.get('input.model', '')
-        second_model = second_record.get('input.model', '')
-        first_prompt = first_record.get('input.prompt', '')
-        second_prompt = second_record.get('input.prompt', '')
+        first_model = first_record.get('model', '')
+        second_model = second_record.get('model', '')
+        first_prompt = first_record.get('prompt', '')
+        second_prompt = second_record.get('prompt', '')
         first_time = first_record.get('startTime', '')
         second_time = second_record.get('startTime', '')
-        
+
         # Check if models are in different tiers
         if not (self._is_cheaper_model(first_model) and self._is_expensive_model(second_model)):
             return False
-        
+
         # Check if prompts are similar
         if not self._are_prompts_similar(first_prompt, second_prompt):
             return False
-        
+
         # Check if calls are within time window
         if not self._are_within_time_window(first_time, second_time):
             return False
-        
+
         # Check if first call was successful (no fallback metadata)
         if self._has_fallback_metadata(first_record):
             return False
-        
+
         return True
     
     def _is_cheaper_model(self, model: str) -> bool:
-        """Check if model is in the cheaper tier"""
-        return model in self.cheaper_models
-    
+        """Check if model is in the cheaper tier (supports versioned names)"""
+        for cheaper in self.cheaper_models:
+            if model and model.startswith(cheaper):
+                return True
+        return False
+
     def _is_expensive_model(self, model: str) -> bool:
-        """Check if model is in the expensive tier"""
-        return model in self.expensive_models
+        """Check if model is in the expensive tier (supports versioned names)"""
+        for expensive in self.expensive_models:
+            if model and model.startswith(expensive):
+                return True
+        return False
     
     def _are_prompts_similar(self, prompt1: str, prompt2: str) -> bool:
         """Check if two prompts are similar using fuzzy matching"""
@@ -118,12 +124,12 @@ class FallbackFailureDetector:
         metadata = record.get('metadata', {})
         return metadata.get('fallback_attempted', False)
     
-    def _create_failure_detection(self, first_record: Dict[str, Any], second_record: Dict[str, Any], model_pricing: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _create_failure_detection(self, first_record: Dict[str, Any], second_record: Dict[str, Any], model_pricing: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Create a fallback failure detection object"""
-        first_model = first_record.get('input.model', '')
-        second_model = second_record.get('input.model', '')
-        first_prompt = first_record.get('input.prompt', '')
-        second_prompt = second_record.get('input.prompt', '')
+        first_model = first_record.get('model', '')
+        second_model = second_record.get('model', '')
+        first_prompt = first_record.get('prompt', '')
+        second_prompt = second_record.get('prompt', '')
         
         # Calculate waste metrics
         fallback_tokens = (
