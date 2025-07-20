@@ -63,8 +63,9 @@ models:
 # Detection thresholds
 thresholds:
   retry_loop:
-    max_retries: 3
+    max_retries: 1
     time_window_minutes: 5
+    similarity_threshold: 0.6
   
   gpt4_short:
     min_tokens_for_gpt4: 100

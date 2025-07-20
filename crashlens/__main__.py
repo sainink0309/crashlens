@@ -12,7 +12,7 @@ from typing import Optional
 
 from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
-from .detectors.short_model_detector import ShortModelDetector
+from .detectors.overkill_model_detector import OverkillModelDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .detectors.fallback_failure import FallbackFailureDetector
 from .reporters.slack_formatter import SlackFormatter
@@ -56,12 +56,28 @@ def scan(log_file: Path, output_format: str, config: Optional[Path]):
             click.echo("⚠️  No traces found in log file", err=True)
             sys.exit(1)
         
-        # Initialize detectors
+        # Get detection thresholds from config
+        thresholds = pricing_config.get('thresholds', {})
+        retry_config = thresholds.get('retry_loop', {})
+        fallback_storm_config = thresholds.get('fallback_storm', {})
+        fallback_failure_config = thresholds.get('fallback_failure', {})
+        
+        # Initialize detectors with config thresholds
         detectors = [
-            RetryLoopDetector(),
-            ShortModelDetector(),
-            FallbackStormDetector(),
-            FallbackFailureDetector()
+            RetryLoopDetector(
+                max_retries=retry_config.get('max_retries', 2),
+                time_window_minutes=retry_config.get('time_window_minutes', 5),
+                similarity_threshold=retry_config.get('similarity_threshold', 0.6)
+            ),
+            OverkillModelDetector(),
+            FallbackStormDetector(
+                fallback_threshold=fallback_storm_config.get('fallback_threshold', 3),
+                time_window_minutes=fallback_storm_config.get('time_window_minutes', 10)
+            ),
+            FallbackFailureDetector(
+                time_window_seconds=fallback_failure_config.get('time_window_seconds', 15),
+                similarity_threshold=fallback_failure_config.get('similarity_threshold', 0.8)
+            )
         ]
         
         # Run all detectors

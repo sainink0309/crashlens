@@ -104,7 +104,8 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
     detectors = [
         RetryLoopDetector(
             max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
-            time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5)
+            time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
+            similarity_threshold=thresholds.get('retry_loop', {}).get('similarity_threshold', 0.9)
         ),
         FallbackStormDetector(
             fallback_threshold=thresholds.get('fallback_storm', {}).get('fallback_threshold', 3),

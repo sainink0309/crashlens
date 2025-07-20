@@ -3,7 +3,7 @@ Overkill & Short Model Detector
 Detects inefficient use of expensive models for short/simple prompts, both for single-model (overkill) and multi-model (short expensive) traces.
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 class OverkillModelDetector:
     """Detects overkill use of expensive models for short tasks in single-model traces, and inefficient use in multi-model traces."""
@@ -21,7 +21,7 @@ class OverkillModelDetector:
             'claude-2.0': 'claude-3-haiku'
         }
 
-    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         detections = []
         for trace_id, records in traces.items():
             models = {r.get("model", "").lower() for r in records}
@@ -79,7 +79,7 @@ class OverkillModelDetector:
                             })
         return [d for d in detections if d is not None]
 
-    def _calculate_record_cost(self, record: Dict[str, Any], model_pricing: Dict[str, Any]) -> float:
+    def _calculate_record_cost(self, record: Dict[str, Any], model_pricing: Optional[Dict[str, Any]]) -> float:
         if not model_pricing:
             return record.get('cost', 0.0)
         model = record.get('model', 'gpt-3.5-turbo')
@@ -94,7 +94,7 @@ class OverkillModelDetector:
             return input_cost + output_cost
         return 0.0
 
-    def _calculate_cost_with_model(self, record: Dict[str, Any], new_model: str, model_pricing: Dict[str, Any]) -> float:
+    def _calculate_cost_with_model(self, record: Dict[str, Any], new_model: str, model_pricing: Optional[Dict[str, Any]]) -> float:
         if not model_pricing:
             return 0.0
         input_tokens = record.get('prompt_tokens', 0)
