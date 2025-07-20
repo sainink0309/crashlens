@@ -63,7 +63,7 @@ models:
 # Detection thresholds
 thresholds:
   retry_loop:
-    max_retries: 1
+    max_retries: 3
     time_window_minutes: 5
     similarity_threshold: 0.6
   
