@@ -7,9 +7,7 @@ from typing import Dict, List, Any, Optional
 
 class OverkillModelDetector:
     """Detects overkill use of expensive models for short tasks in single-model traces, and inefficient use in multi-model traces."""
-    def __init__(self, prompt_token_threshold: int = 50, completion_token_threshold: int = 100, min_tokens_for_gpt4: int = 100):
-        self.prompt_token_threshold = prompt_token_threshold
-        self.completion_token_threshold = completion_token_threshold
+    def __init__(self, min_tokens_for_gpt4: int):
         self.min_tokens_for_gpt4 = min_tokens_for_gpt4
         self.expensive_models = {
             'gpt-4': 'gpt-3.5-turbo',
@@ -30,9 +28,8 @@ class OverkillModelDetector:
                 model = next(iter(models))
                 if model in self.expensive_models:
                     for record in records:
-                        prompt_tokens = record.get("prompt_tokens", 0)
                         completion_tokens = record.get("completion_tokens", 0)
-                        if prompt_tokens < self.prompt_token_threshold and completion_tokens < self.completion_token_threshold:
+                        if completion_tokens < self.min_tokens_for_gpt4:
                             current_cost = self._calculate_record_cost(record, model_pricing)
                             suggested_model = self.expensive_models[model]
                             cheaper_cost = self._calculate_cost_with_model(record, suggested_model, model_pricing)
@@ -41,9 +38,8 @@ class OverkillModelDetector:
                                 "type": "expensive_model_overkill",
                                 "trace_id": trace_id,
                                 "severity": "medium",
-                                "description": f"{model.upper()} used for short/simple task ({prompt_tokens} prompt tokens, {completion_tokens} completion tokens)",
+                                "description": f"{model.upper()} used for short/simple task ({completion_tokens} completion tokens)",
                                 "model_used": model,
-                                "prompt_length": prompt_tokens,
                                 "completion_length": completion_tokens,
                                 "sample_prompt": record.get("prompt", "")[:100] + ("..." if len(record.get("prompt", "")) > 100 else ""),
                                 "suggested_model": suggested_model,
@@ -56,10 +52,9 @@ class OverkillModelDetector:
             else:
                 for record in records:
                     model = record.get('model', '').lower()
-                    prompt = record.get('prompt', '')
                     if model in self.expensive_models:
-                        prompt_tokens = record.get('prompt_tokens', len(prompt.split()))
-                        if prompt_tokens < self.min_tokens_for_gpt4:
+                        completion_tokens = record.get('completion_tokens', 0)
+                        if completion_tokens < self.min_tokens_for_gpt4:
                             current_cost = self._calculate_record_cost(record, model_pricing)
                             suggested_model = self.expensive_models[model]
                             cheaper_cost = self._calculate_cost_with_model(record, suggested_model, model_pricing)
@@ -68,13 +63,13 @@ class OverkillModelDetector:
                                 'type': 'expensive_model_short',
                                 'trace_id': trace_id,
                                 'severity': 'medium',
-                                'description': f"{model.upper()} used for short prompt ({prompt_tokens} tokens)",
-                                'waste_tokens': record.get('completion_tokens', 0),
+                                'description': f"{model.upper()} used for short completion ({completion_tokens} tokens)",
+                                'waste_tokens': completion_tokens,
                                 'waste_cost': potential_savings,
-                                'prompt_length': prompt_tokens,
+                                'completion_length': completion_tokens,
                                 'model_used': model,
                                 'suggested_model': suggested_model,
-                                'sample_prompt': prompt[:100] + '...' if len(prompt) > 100 else prompt,
+                                'sample_prompt': record.get('prompt', '')[:100] + '...' if len(record.get('prompt', '')) > 100 else record.get('prompt', ''),
                                 'records': [record]
                             })
         return [d for d in detections if d is not None]

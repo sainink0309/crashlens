@@ -68,7 +68,7 @@ thresholds:
     similarity_threshold: 0.6
   
   gpt4_short:
-    min_tokens_for_gpt4: 100
+    min_tokens_for_gpt4: 800
     gpt4_cost_multiplier: 20.0
     # Models considered expensive for short prompts
     expensive_models:

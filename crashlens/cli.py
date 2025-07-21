@@ -72,7 +72,13 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
         time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 15),
         similarity_threshold=thresholds.get('fallback_failure', {}).get('similarity_threshold', 0.8)
     )
-    overkill_detector = OverkillModelDetector()
+    gpt4_short = thresholds.get('gpt4_short', {})
+    min_tokens = gpt4_short.get('min_tokens_for_gpt4')
+    if min_tokens is None:
+        raise ValueError("min_tokens_for_gpt4 must be set in pricing.yaml under thresholds.gpt4_short")
+    overkill_detector = OverkillModelDetector(
+        min_tokens_for_gpt4=min_tokens
+    )
     # Other detectors can be added here as needed
 
     # Run fallback failure detector first

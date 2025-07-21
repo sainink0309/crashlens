@@ -190,8 +190,8 @@ class MarkdownFormatter:
             lines.append(f"- **Retry Count**: {detection.get('retry_count', 0)}")
             lines.append(f"- **Time Span**: {detection.get('time_span', 'unknown')}")
         
-        elif detection['type'] == 'gpt4_short':
-            lines.append(f"- **Prompt Length**: {detection.get('prompt_length', 0)} tokens")
+        elif detection['type'] in ['gpt4_short', 'expensive_model_short', 'expensive_model_overkill']:
+            lines.append(f"- **Completion Length**: {detection.get('completion_length', 0)} tokens")
             lines.append(f"- **Model Used**: {detection.get('model_used', 'unknown')}")
             lines.append(f"- **Suggested Model**: {detection.get('suggested_model', 'gpt-3.5-turbo')}")
         
