@@ -14,7 +14,7 @@ from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .detectors.fallback_failure import FallbackFailureDetector
-from .detectors.overkill_model_detector import detect_expensive_model_waste
+from .detectors.overkill_model_detector import OverkillModelDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
 from .reporters.summary_formatter import SummaryFormatter
@@ -97,41 +97,43 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
 
     # Run overkill detector only on traces without fallback failures
     traces_without_fallback = {tid: recs for tid, recs in traces.items() if tid not in fallback_trace_ids}
-    overkill_detections = detect_expensive_model_waste(
+    overkill_detector = OverkillModelDetector(
+        max_prompt_tokens_for_overkill=thresholds.get('overkill', {}).get('max_prompt_tokens', 20),
+        max_prompt_chars=thresholds.get('overkill', {}).get('max_prompt_chars', 150)
+    )
+    overkill_detections = overkill_detector.detect(
         traces_without_fallback,
         model_pricing=pricing_config.get('models', {})
     )
 
     # Run other detectors as before (if needed)
-    detectors = [
-        RetryLoopDetector(
-            max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
-            time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
-            max_retry_interval_minutes=thresholds.get('retry_loop', {}).get('max_retry_interval_minutes', 2)
-        ),
-        FallbackStormDetector(
-            fallback_threshold=thresholds.get('fallback_storm', {}).get('fallback_threshold', 3),
-            time_window_minutes=thresholds.get('fallback_storm', {}).get('time_window_minutes', 10)
-        )
-    ]
-
+    # Initialize detectors with proper configuration
+    retry_detector = RetryLoopDetector(
+        max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
+        time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
+        max_retry_interval_minutes=thresholds.get('retry_loop', {}).get('max_retry_interval_minutes', 2)
+    )
+    
     all_detections = []
     detector_results = []
     already_flagged_ids = set()
     
-    # Add other detectors first to build flagged IDs
-    for detector in detectors:
-        if hasattr(detector, 'detect') and 'model_pricing' in detector.detect.__code__.co_varnames:
-            detections = detector.detect(traces, pricing_config.get('models', {}))
-        else:
-            detections = detector.detect(traces)
-        
-        # Track flagged trace IDs
-        for detection in detections:
-            already_flagged_ids.add(detection.get('trace_id'))
-        
-        all_detections.extend(detections)
-        detector_results.append((detector.__class__.__name__, detections))
+    # Run RetryLoopDetector first to build flagged IDs
+    retry_detections = retry_detector.detect(traces, pricing_config.get('models', {}))
+    for detection in retry_detections:
+        already_flagged_ids.add(detection.get('trace_id'))
+    all_detections.extend(retry_detections)
+    detector_results.append(("RetryLoopDetector", retry_detections))
+    
+    # Run FallbackStormDetector with suppression
+    storm_detector = FallbackStormDetector(
+        min_calls=thresholds.get('fallback_storm', {}).get('min_calls', 3),
+        min_models=thresholds.get('fallback_storm', {}).get('min_models', 2),
+        max_trace_window_minutes=thresholds.get('fallback_storm', {}).get('max_trace_window_minutes', 3)
+    )
+    storm_detections = storm_detector.detect(traces, pricing_config.get('models', {}), already_flagged_ids)
+    all_detections.extend(storm_detections)
+    detector_results.append(("FallbackStormDetector", storm_detections))
     
     # Run fallback failure detector with suppression
     fallback_detections = fallback_detector.detect(traces, pricing_config.get('models', {}), already_flagged_ids)

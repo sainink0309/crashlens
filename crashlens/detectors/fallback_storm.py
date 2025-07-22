@@ -1,125 +1,160 @@
 """
-Fallback Storm Detector
-Detects patterns of model fallbacks that suggest configuration issues
+Fallback Storm Detector - OSS v0.1 Minimal Implementation
+Detects chaotic model switching and cost spikes within traces
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 
 
 class FallbackStormDetector:
-    """Detects fallback storms in API calls"""
+    """Detects fallback storms according to OSS v0.1 minimal checklist"""
     
-    def __init__(self, fallback_threshold: int = 3, time_window_minutes: int = 10):
-        self.fallback_threshold = fallback_threshold
-        self.time_window = timedelta(minutes=time_window_minutes)
+    def __init__(self, min_calls: int = 3, min_models: int = 2, max_trace_window_minutes: int = 3):
+        """
+        Initialize detector with OSS v0.1 minimal configuration
+        
+        Args:
+            min_calls: Minimum calls required to trigger detection (default: 3)
+            min_models: Minimum distinct models required (default: 2) 
+            max_trace_window_minutes: Maximum time window for trace (default: 3 minutes)
+        """
+        self.min_calls = min_calls
+        self.min_models = min_models
+        self.max_trace_window = timedelta(minutes=max_trace_window_minutes)
     
-    def detect(self, traces: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-        """Detect fallback storms across all traces"""
+    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None, already_flagged_ids: Optional[set] = None) -> List[Dict[str, Any]]:
+        """
+        Detect fallback storms according to OSS v0.1 minimal checklist
+        
+        Args:
+            traces: Dictionary of trace_id -> list of records
+            model_pricing: Optional pricing configuration
+            already_flagged_ids: Set of trace IDs already flagged by RetryLoopDetector
+            
+        Returns:
+            List of detection results
+        """
         detections = []
+        if already_flagged_ids is None:
+            already_flagged_ids = set()
         
         for trace_id, records in traces.items():
-            # Look for patterns of model changes within time window
-            fallback_groups = self._find_fallback_patterns(records)
+            # ⚠️ SUPPRESSION: Skip if already flagged by RetryLoopDetector
+            if trace_id in already_flagged_ids:
+                continue
             
-            for group in fallback_groups:
-                if len(group) >= self.fallback_threshold:
-                    # Calculate waste metrics
-                    total_tokens = sum(r.get('completion_tokens', 0) for r in group)
-                    total_cost = sum(r.get('cost', 0.0) for r in group)
-                    
-                    # Identify the fallback sequence
-                    models_used = [r.get('model', 'unknown') for r in group]
-                    unique_models = list(dict.fromkeys(models_used))  # Preserve order
-                    
-                    detection = {
-                        'type': 'fallback_storm',
-                        'trace_id': trace_id,
-                        'severity': 'high' if len(group) > 5 else 'medium',
-                        'description': f"Fallback storm detected: {len(group)} model switches",
-                        'waste_tokens': total_tokens,
-                        'waste_cost': total_cost,
-                        'fallback_count': len(group),
-                        'models_sequence': unique_models,
-                        'time_span': self._get_time_span(group),
-                        'sample_prompt': group[0].get('prompt', '')[:100] + '...' if len(group[0].get('prompt', '')) > 100 else group[0].get('prompt', ''),
-                        'records': group
-                    }
-                    detections.append(detection)
+            detection = self._check_storm_pattern(trace_id, records, model_pricing)
+            if detection:
+                detections.append(detection)
         
         return detections
     
-    def _find_fallback_patterns(self, records: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
-        """Find groups of records that show fallback patterns"""
-        if len(records) < 2:
-            return []
+    def _check_storm_pattern(self, trace_id: str, records: List[Dict[str, Any]], model_pricing: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Check if trace matches fallback storm pattern according to checklist"""
         
-        # Sort records by timestamp
+        # 🔍 CHECKLIST 1: Same trace_id (already grouped)
+        # 🔍 CHECKLIST 2: 3 or more total calls in the trace
+        if len(records) < self.min_calls:
+            return None
+        
+        # Sort records by time
         sorted_records = sorted(records, key=lambda r: r.get('startTime', ''))
         
-        fallback_groups = []
-        current_group = []
+        # 🔍 CHECKLIST 4: All calls occurred within 3 minutes
+        if not self._within_time_window(sorted_records):
+            return None
         
-        for i, record in enumerate(sorted_records):
-            if not current_group:
-                current_group = [record]
-                continue
-            
-            # Check if this record is within time window and shows model change
-            current_time = datetime.fromisoformat(record['startTime'].replace('Z', '+00:00'))
-            last_record = current_group[-1]
-            last_time = datetime.fromisoformat(last_record['startTime'].replace('Z', '+00:00'))
-            
-            time_diff = abs((current_time - last_time).total_seconds())
-            current_model = record.get('model', '')
-            last_model = last_record.get('model', '')
-            
-            # Check if within time window and model changed
-            if (time_diff <= self.time_window.total_seconds() and 
-                current_model != last_model and 
-                self._is_similar_prompt(record, last_record)):
-                
-                current_group.append(record)
-            else:
-                # End current group if it has enough records
-                if len(current_group) >= self.fallback_threshold:
-                    fallback_groups.append(current_group)
-                current_group = [record]
+        # 🔍 CHECKLIST 3: 2 or more distinct models used
+        models_used = [r.get('model', '').lower() for r in sorted_records if r.get('model')]
+        unique_models = list(dict.fromkeys(models_used))  # Preserve order, remove duplicates
         
-        # Don't forget the last group
-        if len(current_group) >= self.fallback_threshold:
-            fallback_groups.append(current_group)
+        if len(unique_models) < self.min_models:
+            return None
         
-        return fallback_groups
+        # Calculate estimated waste
+        estimated_waste = self._calculate_estimated_waste(sorted_records, model_pricing)
+        
+        # 🖨️ CLI OUTPUT FORMAT: Return detection according to specification
+        return {
+            'type': 'fallback_storm',
+            'detector': 'fallback_storm',
+            'trace_id': trace_id,
+            'severity': 'high' if len(sorted_records) > 5 else 'medium',
+            'description': f"Fallback storm: {len(unique_models)} models used in {len(sorted_records)} calls",
+            'models_used': unique_models,
+            'num_calls': len(sorted_records),
+            'estimated_waste_usd': estimated_waste,
+            'waste_cost': estimated_waste,
+            'suppressed_by': None,
+            'time_span': self._get_time_span_seconds(sorted_records),
+            'sample_prompt': sorted_records[0].get('prompt', '')[:100] + '...' if len(sorted_records[0].get('prompt', '')) > 100 else sorted_records[0].get('prompt', '')
+        }
     
-    def _is_similar_prompt(self, record1: Dict[str, Any], record2: Dict[str, Any]) -> bool:
-        """Check if two records have similar prompts"""
-        prompt1 = record1.get('prompt', '')
-        prompt2 = record2.get('prompt', '')
-        
-        # Simple similarity check (in real implementation, use more sophisticated comparison)
-        if not prompt1 or not prompt2:
-            return False
-        
-        # Check if prompts are similar (same first 50 chars or similar length)
-        return (prompt1[:50] == prompt2[:50] or 
-                abs(len(prompt1) - len(prompt2)) < 20)
-    
-    def _get_time_span(self, records: List[Dict[str, Any]]) -> str:
-        """Calculate time span of fallback storm"""
+    def _within_time_window(self, records: List[Dict[str, Any]]) -> bool:
+        """Check if all calls occurred within the time window"""
         if len(records) < 2:
-            return "0 seconds"
+            return True
         
-        timestamps = []
+        try:
+            timestamps = []
+            for record in records:
+                ts_str = record.get('startTime', '')
+                if ts_str:
+                    ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    timestamps.append(ts)
+            
+            if len(timestamps) < 2:
+                return True
+            
+            time_span = max(timestamps) - min(timestamps)
+            return time_span <= self.max_trace_window
+            
+        except (ValueError, TypeError):
+            return False
+    
+    def _calculate_estimated_waste(self, records: List[Dict[str, Any]], model_pricing: Optional[Dict[str, Any]]) -> float:
+        """Calculate estimated waste (simple sum of model costs)"""
+        total_cost = 0.0
+        
         for record in records:
-            try:
-                ts = datetime.fromisoformat(record['startTime'].replace('Z', '+00:00'))
-                timestamps.append(ts)
-            except (KeyError, ValueError):
+            # Use existing cost if available
+            if 'cost' in record and record['cost'] is not None:
+                total_cost += float(record['cost'])
                 continue
+            
+            # Calculate from pricing if available
+            if model_pricing:
+                model = record.get('model', '')
+                model_config = model_pricing.get(model, {})
+                if model_config:
+                    input_tokens = record.get('usage', {}).get('prompt_tokens', 0)
+                    output_tokens = record.get('usage', {}).get('completion_tokens', 0)
+                    
+                    input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
+                    output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
+                    total_cost += input_cost + output_cost
         
-        if len(timestamps) < 2:
-            return "0 seconds"
+        return round(total_cost, 6)
+    
+    def _get_time_span_seconds(self, records: List[Dict[str, Any]]) -> float:
+        """Get time span of records in seconds"""
+        if len(records) < 2:
+            return 0.0
         
-        span = max(timestamps) - min(timestamps)
-        return f"{span.total_seconds():.1f} seconds" 
+        try:
+            timestamps = []
+            for record in records:
+                ts_str = record.get('startTime', '')
+                if ts_str:
+                    ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    timestamps.append(ts)
+            
+            if len(timestamps) < 2:
+                return 0.0
+            
+            span = max(timestamps) - min(timestamps)
+            return round(span.total_seconds(), 2)
+            
+        except (ValueError, TypeError):
+            return 0.0 
