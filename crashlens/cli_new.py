@@ -71,22 +71,21 @@ class SuppressionEngine:
                 self._add_suppressed_detection(detection, detector_name, "disabled_by_config")
                 continue
             
-            # Check trace ownership and priority (only if not disabled by config)
+            # Check trace ownership and priority
             if trace_id in self.trace_ownership:
                 current_owner = self.trace_ownership[trace_id]
                 current_priority = DETECTOR_PRIORITY.get(detector_name, 999)
                 owner_priority = DETECTOR_PRIORITY.get(current_owner, 999)
                 
-                # 🧰 3. Suppression Hook: Priority-based suppression (configurable)
-                if self._should_suppress_by_priority(detector_name, current_priority, owner_priority):
+                # 🧰 3. Suppression Hook: Priority-based suppression
+                if current_priority > owner_priority:
                     # Current detector has lower priority, suppress this detection
                     self._add_suppressed_detection(detection, detector_name, f"higher_priority_detector:{current_owner}")
                     continue
                 elif current_priority < owner_priority:
                     # Current detector has higher priority, it takes ownership
-                    # Move previous owner's detections to suppressed (only if priority suppression enabled)
-                    if self._should_suppress_by_priority(current_owner, owner_priority, current_priority):
-                        self._transfer_ownership(trace_id, current_owner, detector_name)
+                    # Move previous owner's detections to suppressed
+                    self._transfer_ownership(trace_id, current_owner, detector_name)
             
             # This detection is active - claim ownership
             self.trace_ownership[trace_id] = detector_name
@@ -99,46 +98,8 @@ class SuppressionEngine:
     
     def _is_detector_suppressed(self, detector_name: str, trace_id: str) -> bool:
         """Check if detector is suppressed by configuration"""
-        # Get the detector config (remove 'Detector' suffix and convert to lowercase)
-        config_key = detector_name.lower().replace('detector', '').replace('_', '')
-        if config_key in ['retryloop']:
-            config_key = 'retry_loop'
-        elif config_key == 'fallbackstorm':
-            config_key = 'fallback_storm'
-        elif config_key == 'fallbackfailure':
-            config_key = 'fallback_failure'
-        elif config_key == 'overkillmodel':
-            config_key = 'overkill_model'
-        
-        detector_config = self.suppression_config.get(config_key, {})
-        
-        # Check suppression rules
-        if detector_config.get('suppress_if_retry_loop', False):
-            return self.trace_ownership.get(trace_id) == 'RetryLoopDetector'
-        
-        return False
-    
-    def _should_suppress_by_priority(self, detector_name: str, current_priority: int, owner_priority: int) -> bool:
-        """Check if detector should be suppressed by priority logic"""
-        # Get the detector config
-        config_key = detector_name.lower().replace('detector', '').replace('_', '')
-        if config_key in ['retryloop']:
-            config_key = 'retry_loop'
-        elif config_key == 'fallbackstorm':
-            config_key = 'fallback_storm'
-        elif config_key == 'fallbackfailure':
-            config_key = 'fallback_failure'
-        elif config_key == 'overkillmodel':
-            config_key = 'overkill_model'
-        
-        detector_config = self.suppression_config.get(config_key, {})
-        
-        # If suppress_if_retry_loop is False, allow coexistence (no priority suppression)
-        if not detector_config.get('suppress_if_retry_loop', True):
-            return False
-        
-        # Otherwise, use priority suppression
-        return current_priority > owner_priority
+        detector_config = self.suppression_config.get(detector_name.lower().replace('detector', ''), {})
+        return detector_config.get('suppress_if_retry_loop', False) and self.trace_ownership.get(trace_id) == 'RetryLoopDetector'
     
     def _add_suppressed_detection(self, detection: Dict[str, Any], detector_name: str, reason: str):
         """Add detection to suppressed list with metadata"""
@@ -340,8 +301,8 @@ def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, confi
             time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 300)
         )),
         ('OverkillModelDetector', OverkillModelDetector(
-            max_prompt_tokens=thresholds.get('overkill_model', {}).get('max_prompt_tokens', 20),
-            max_prompt_chars=thresholds.get('overkill_model', {}).get('max_prompt_chars', 150)
+            max_prompt_tokens_for_overkill=thresholds.get('overkill', {}).get('max_prompt_tokens', 20),
+            max_prompt_chars=thresholds.get('overkill', {}).get('max_prompt_chars', 150)
         ))
     ]
     

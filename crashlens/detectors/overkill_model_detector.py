@@ -1,6 +1,7 @@
 """
-Overkill Model Detector
+Overkill Model Detector - Enhanced v1.2
 Detects inefficient use of expensive models for short/simple prompts according to official checklist.
+Supports configurable thresholds, cost estimation, and routing suggestions.
 """
 
 import re
@@ -11,38 +12,60 @@ from typing import Dict, List, Any, Optional
 class OverkillModelDetector:
     """Detects overkill usage of expensive models for short/simple tasks"""
     
-    def __init__(self, max_prompt_tokens_for_overkill: int = 20, max_prompt_chars: int = 150):
+    def __init__(self, 
+                 max_prompt_tokens: int = 20, 
+                 max_prompt_chars: int = 150,
+                 expensive_models: Optional[List[str]] = None,
+                 simple_task_keywords: Optional[List[str]] = None,
+                 comment_tags: Optional[List[str]] = None):
         """
-        Initialize the Overkill Model Detector
+        Initialize the Enhanced Overkill Model Detector
         
         Args:
-            max_prompt_tokens_for_overkill: Maximum tokens for short prompt detection
+            max_prompt_tokens: Maximum tokens for short prompt detection (configurable)
             max_prompt_chars: Maximum characters for very short prompt detection
+            expensive_models: List of models to check for overkill (configurable)
+            simple_task_keywords: Keywords indicating simple tasks
+            comment_tags: Optional comment tags to check for (#low_priority)
         """
-        self.max_prompt_tokens_for_overkill = max_prompt_tokens_for_overkill
+        self.max_prompt_tokens = max_prompt_tokens
         self.max_prompt_chars = max_prompt_chars
         
-        # Expensive models that should be checked for overkill
-        self.overkill_model_names = [
-            "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo", "gpt-4-32k",
-            "claude-2", "claude-2.1", "claude-3-opus"
+        # 🧠 2. Configurable expensive models list
+        self.expensive_models = expensive_models or [
+            "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo", "gpt-4-32k", "gpt-4o",
+            "claude-2", "claude-2.1", "claude-3-opus", "claude-3-sonnet"
         ]
         
-        # Keywords indicating simple tasks
-        self.simple_prompt_keywords = [
-            "summarize", "fix grammar", "translate", "explain"
+        # 🧠 2. Configurable simple task keywords
+        self.simple_task_keywords = simple_task_keywords or [
+            "summarize", "fix grammar", "translate", "explain", "what is", 
+            "hello", "hi", "thanks", "thank you", "yes", "no", "ok"
         ]
+        
+        # 🧠 2. Optional comment tag matching
+        self.comment_tags = comment_tags or ["#low_priority", "#simple", "#quick"]
+        
+        # Routing suggestions for cost optimization
+        self.routing_suggestions = {
+            "gpt-4": "gpt-3.5-turbo",
+            "gpt-4-32k": "gpt-3.5-turbo",
+            "gpt-4-turbo": "gpt-3.5-turbo",
+            "claude-3-opus": "claude-3-haiku",
+            "claude-3-sonnet": "claude-3-haiku",
+            "claude-2.1": "claude-instant-1"
+        }
     
     def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        Detect overkill model usage according to official checklist
+        Detect overkill model usage with enhanced cost estimation and routing suggestions
         
         Args:
             traces: Dictionary of trace_id -> list of records
-            model_pricing: Optional pricing configuration
+            model_pricing: Pricing configuration for cost estimation
             
         Returns:
-            List of detection results
+            List of detection results with cost estimates and routing suggestions
         """
         detections = []
         
@@ -57,8 +80,9 @@ class OverkillModelDetector:
     def _check_overkill_pattern(self, trace_id: str, record: Dict[str, Any], model_pricing: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """Check if a single record represents overkill model usage"""
         
-        # ✅ CHECKLIST: Span uses expensive model
-        model = record.get('model', '').lower()
+        # ✅ CHECKLIST: Span uses expensive model - handle both field formats
+        model = record.get('model', '') or record.get('input', {}).get('model', '')
+        model = model.lower()
         if not self._is_expensive_model(model):
             return None
         
@@ -66,11 +90,14 @@ class OverkillModelDetector:
         if not self._span_succeeded(record):
             return None
         
-        prompt = record.get('prompt', '')
+        # Extract prompt from various possible locations
+        prompt = (record.get('prompt', '') or 
+                 record.get('input', {}).get('prompt', '') or
+                 self._extract_prompt_from_messages(record.get('input', {}).get('messages', [])))
         
         # ✅ CHECKLIST: Check if prompt is short
         prompt_tokens = self._estimate_tokens(prompt)
-        if prompt_tokens > self.max_prompt_tokens_for_overkill:
+        if prompt_tokens > self.max_prompt_tokens:
             return None
         
         # ✅ CHECKLIST: Check if task looks simple via heuristics
@@ -82,10 +109,12 @@ class OverkillModelDetector:
         if self._has_complex_format(prompt):
             return None
         
-        # Calculate estimated cost
+        # 📈 4. Calculate estimated cost with accurate pricing
         estimated_cost = self._calculate_estimated_cost(record, model_pricing)
+        suggested_model = self.routing_suggestions.get(model, "gpt-3.5-turbo")
+        potential_savings = self._calculate_potential_savings(record, model, suggested_model, model_pricing)
         
-        # 💡 CLI OUTPUT: Return detection metadata
+        # 💡 CLI OUTPUT: Return enhanced detection metadata with cost and routing info
         return {
             'type': 'overkill_model',
             'trace_id': trace_id,
@@ -95,6 +124,9 @@ class OverkillModelDetector:
             'prompt_length': len(prompt),
             'reason': simple_reason,
             'estimated_cost_usd': estimated_cost,
+            'suggested_model': suggested_model,
+            'potential_savings_usd': potential_savings,
+            'prompt_preview': prompt[:50] + "..." if len(prompt) > 50 else prompt,
             'overkill_detected': True,
             'description': f"Overkill: {model} used for simple task ({simple_reason})",
             'waste_cost': estimated_cost * 0.7,  # Assume 70% could be saved with cheaper model
@@ -104,7 +136,7 @@ class OverkillModelDetector:
     def _is_expensive_model(self, model: str) -> bool:
         """Check if model is considered expensive for overkill detection"""
         model_lower = model.lower()
-        return any(expensive in model_lower for expensive in self.overkill_model_names)
+        return any(expensive in model_lower for expensive in self.expensive_models)
     
     def _span_succeeded(self, record: Dict[str, Any]) -> bool:
         """Check if span succeeded (returned output, not error)"""
@@ -139,7 +171,7 @@ class OverkillModelDetector:
         prompt_lower = prompt.lower().strip()
         
         # ✅ CHECKLIST: Prompt starts with simple keywords
-        for keyword in self.simple_prompt_keywords:
+        for keyword in self.simple_task_keywords:
             if prompt_lower.startswith(keyword):
                 return f"prompt starts with '{keyword}'"
         
@@ -177,33 +209,66 @@ class OverkillModelDetector:
         
         return False
     
+    def _extract_prompt_from_messages(self, messages: List[Dict[str, Any]]) -> str:
+        """Extract prompt text from messages array"""
+        if not messages:
+            return ""
+        
+        # Extract user messages
+        user_messages = [msg.get('content', '') for msg in messages if msg.get('role') == 'user']
+        return ' '.join(user_messages)
+    
+    def _calculate_potential_savings(self, record: Dict[str, Any], current_model: str, suggested_model: str, model_pricing: Optional[Dict[str, Any]]) -> float:
+        """Calculate potential savings by switching to suggested model"""
+        if not model_pricing:
+            return 0.0
+            
+        # Get current cost
+        current_cost = self._calculate_estimated_cost(record, model_pricing)
+        
+        # Calculate cost with suggested model
+        suggested_record = record.copy()
+        suggested_record['model'] = suggested_model
+        suggested_cost = self._calculate_estimated_cost(suggested_record, model_pricing)
+        
+        return max(0.0, current_cost - suggested_cost)
+    
     def _calculate_estimated_cost(self, record: Dict[str, Any], model_pricing: Optional[Dict[str, Any]]) -> float:
-        """Calculate estimated cost for the record"""
+        """📈 4. Calculate estimated cost with accurate pricing (updated for 1M token normalization)"""
         # Use existing cost if available
         if 'cost' in record and record['cost'] is not None:
             return float(record['cost'])
         
-        # Calculate from pricing if available
+        # Extract model from record (handle both formats)
+        model = record.get('model', '') or record.get('input', {}).get('model', '')
+        
+        # Extract usage tokens
+        usage = record.get('usage', {})
+        input_tokens = usage.get('prompt_tokens', 0)
+        output_tokens = usage.get('completion_tokens', 0)
+        
+        # Calculate from pricing if available - handle both direct models dict and full config
         if model_pricing:
-            model = record.get('model', '')
-            model_config = model_pricing.get(model, {})
+            # Handle both formats: direct models dict or full config with models section
+            models_config = model_pricing if 'input_cost_per_1m' in model_pricing.get(model, {}) else model_pricing.get('models', {})
+            model_config = models_config.get(model, {})
+            
             if model_config:
-                input_tokens = record.get('usage', {}).get('prompt_tokens', 0)
-                output_tokens = record.get('usage', {}).get('completion_tokens', 0)
-                
-                input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
-                output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
+                # Updated for 1M token normalization
+                input_cost = (input_tokens / 1000000) * model_config.get('input_cost_per_1m', 0)
+                output_cost = (output_tokens / 1000000) * model_config.get('output_cost_per_1m', 0)
                 return input_cost + output_cost
         
-        # Fallback estimation for common models
-        model = record.get('model', '').lower()
-        input_tokens = record.get('usage', {}).get('prompt_tokens', 0)
-        output_tokens = record.get('usage', {}).get('completion_tokens', 0)
+        # Fallback estimation for common models (updated pricing)
+        model = model.lower()
         
+        # Updated fallback costs per 1M tokens
         if 'gpt-4' in model:
-            return (input_tokens * 0.03 + output_tokens * 0.06) / 1000
-        elif 'claude-2' in model:
-            return (input_tokens * 0.008 + output_tokens * 0.024) / 1000
+            return (input_tokens * 30.0 + output_tokens * 60.0) / 1000000
+        elif 'claude-3-opus' in model:
+            return (input_tokens * 15.0 + output_tokens * 75.0) / 1000000
+        elif 'gpt-3.5-turbo' in model:
+            return (input_tokens * 1.5 + output_tokens * 2.0) / 1000000
         
         return 0.0
 

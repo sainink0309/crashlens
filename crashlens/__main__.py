@@ -70,8 +70,8 @@ def _run_prioritized_detection(traces: Dict[str, List[Dict[str, Any]]], pricing_
         ),
         OverkillModelDetector(),
         FallbackStormDetector(
-            fallback_threshold=fallback_storm_config.get('fallback_threshold', 3),
-            time_window_minutes=fallback_storm_config.get('time_window_minutes', 10)
+            min_calls=fallback_storm_config.get('fallback_threshold', 3),
+            max_trace_window_minutes=fallback_storm_config.get('time_window_minutes', 10)
         )
     ]
     
