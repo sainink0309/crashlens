@@ -98,7 +98,7 @@ class MarkdownFormatter:
             model_used = detection.get('model_used', 'unknown')
             suggested_model = detection.get('suggested_model', 'unknown')
             
-            # Create a key that groups by type and model combination
+            # Only aggregate 'expensive_model_short' for expensive model waste
             if det_type == 'expensive_model_short':
                 key = f"{det_type}_{model_used}_{suggested_model}"
             else:

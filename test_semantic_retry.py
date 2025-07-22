@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for semantic retry loop detection
-Demonstrates the enhanced RetryLoopDetector with sentence-transformers
+Test script for retry loop detection (exact match only)
 """
 
 import json
@@ -9,7 +8,7 @@ from datetime import datetime, timedelta
 from crashlens.detectors.retry_loops import RetryLoopDetector
 
 def create_test_logs():
-    """Create test logs with semantic retry patterns"""
+    """Create test logs with retry patterns"""
     base_time = datetime.now()
     logs = []
     
@@ -30,38 +29,12 @@ def create_test_logs():
             "cost": 0.0003
         })
     
-    # Scenario 2: Semantic retry loop (very similar prompts - 5 calls)
-    semantic_prompts = [
-        "What's the weather like today?",
-        "How's the weather today?",
-        "Can you tell me about today's weather?",
-        "What's the current weather condition?",
-        "How is the weather looking today?"
-    ]
-    
-    for i, prompt in enumerate(semantic_prompts):
-        logs.append({
-            "traceId": "trace_002",
-            "type": "generation",
-            "startTime": (base_time + timedelta(minutes=2, seconds=i*30)).isoformat() + "Z",
-            "input": {
-                "model": "gpt-4",
-                "prompt": prompt
-            },
-            "usage": {
-                "prompt_tokens": 8,
-                "completion_tokens": 15
-            },
-            "cost": 0.0006
-        })
-    
-    # Scenario 3: Different prompts (should not trigger)
+    # Scenario 2: Different prompts (should not trigger)
     different_prompts = [
         "What is 2+2?",
         "Explain quantum physics",
         "Write a haiku about coding"
     ]
-    
     for i, prompt in enumerate(different_prompts):
         logs.append({
             "traceId": "trace_003",
@@ -72,17 +45,16 @@ def create_test_logs():
                 "prompt": prompt
             },
             "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20
+                "prompt_tokens": 8,
+                "completion_tokens": 15
             },
-            "cost": 0.0008
+            "cost": 0.0006
         })
-    
     return logs
 
-def test_semantic_detection():
-    """Test semantic retry loop detection"""
-    print("🧪 Testing Semantic Retry Loop Detection")
+def test_retry_loop_detection():
+    """Test retry loop detection (exact match only)"""
+    print("🧪 Testing Retry Loop Detection (Exact Match)")
     print("=" * 50)
     
     # Create test logs
@@ -114,12 +86,11 @@ def test_semantic_detection():
             print(f"     - {record['prompt']}")
     print()
     
-    # Test semantic detection
-    print("📊 Testing semantic similarity detection:")
+    # Test retry loop detection
+    print("📊 Testing retry loop detection (exact match):")
     detector = RetryLoopDetector(
         max_retries=3,  # This means >3, so 4+ records needed
-        time_window_minutes=5,
-        similarity_threshold=0.8  # Lower threshold to catch more semantic similarities
+        time_window_minutes=5
     )
     
     detections = detector.detect(traces)
@@ -140,7 +111,7 @@ def test_semantic_detection():
     if not detections:
         print("❌ No retry loops detected")
     
-    print(f"\n🎯 Summary: {len(detections)} retry loop(s) detected using semantic similarity")
+    print(f"\n🎯 Summary: {len(detections)} retry loop(s) detected using exact match")
 
 if __name__ == "__main__":
-    test_semantic_detection() 
+    test_retry_loop_detection() 

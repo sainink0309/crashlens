@@ -14,7 +14,7 @@ from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
 from .detectors.fallback_storm import FallbackStormDetector
 from .detectors.fallback_failure import FallbackFailureDetector
-from .detectors.overkill_model_detector import OverkillModelDetector
+from .detectors.overkill_model_detector import detect_expensive_model_waste
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
 from .reporters.summary_formatter import SummaryFormatter
@@ -69,10 +69,9 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
     thresholds = pricing_config.get('thresholds', {})
 
     fallback_detector = FallbackFailureDetector(
-        time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 15),
-        similarity_threshold=thresholds.get('fallback_failure', {}).get('similarity_threshold', 0.8)
+        time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 300)
     )
-    overkill_detector = OverkillModelDetector()
+    # overkill_detector = detect_expensive_model_waste
     # Other detectors can be added here as needed
 
     # Run fallback failure detector first
@@ -98,14 +97,17 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
 
     # Run overkill detector only on traces without fallback failures
     traces_without_fallback = {tid: recs for tid, recs in traces.items() if tid not in fallback_trace_ids}
-    overkill_detections = overkill_detector.detect(traces_without_fallback, pricing_config.get('models', {}))
+    overkill_detections = detect_expensive_model_waste(
+        traces_without_fallback,
+        model_pricing=pricing_config.get('models', {})
+    )
 
     # Run other detectors as before (if needed)
     detectors = [
         RetryLoopDetector(
             max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
             time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
-            similarity_threshold=thresholds.get('retry_loop', {}).get('similarity_threshold', 0.9)
+            max_retry_interval_minutes=thresholds.get('retry_loop', {}).get('max_retry_interval_minutes', 2)
         ),
         FallbackStormDetector(
             fallback_threshold=thresholds.get('fallback_storm', {}).get('fallback_threshold', 3),
@@ -115,19 +117,29 @@ def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: O
 
     all_detections = []
     detector_results = []
-    # Add prioritized detectors first
-    all_detections.extend(fallback_detections)
-    detector_results.append(("FallbackFailureDetector", fallback_detections))
-    all_detections.extend(overkill_detections)
-    detector_results.append(("OverkillModelDetector", overkill_detections))
-    # Add other detectors
+    already_flagged_ids = set()
+    
+    # Add other detectors first to build flagged IDs
     for detector in detectors:
         if hasattr(detector, 'detect') and 'model_pricing' in detector.detect.__code__.co_varnames:
             detections = detector.detect(traces, pricing_config.get('models', {}))
         else:
             detections = detector.detect(traces)
+        
+        # Track flagged trace IDs
+        for detection in detections:
+            already_flagged_ids.add(detection.get('trace_id'))
+        
         all_detections.extend(detections)
         detector_results.append((detector.__class__.__name__, detections))
+    
+    # Run fallback failure detector with suppression
+    fallback_detections = fallback_detector.detect(traces, pricing_config.get('models', {}), already_flagged_ids)
+    # Add prioritized detectors
+    all_detections.extend(fallback_detections)
+    detector_results.append(("FallbackFailureDetector", fallback_detections))
+    all_detections.extend(overkill_detections)
+    detector_results.append(("OverkillModelDetector", overkill_detections))
 
     # Handle dry-run-policy mode
     if dry_run_policy:
