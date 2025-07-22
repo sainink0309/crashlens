@@ -3,7 +3,7 @@ Markdown Formatter
 Formats detection results in Markdown format for documentation
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from ..utils.pii_scrubber import PIIScrubber
 
@@ -19,7 +19,7 @@ class MarkdownFormatter:
         }
         self.pii_scrubber = PIIScrubber()
     
-    def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool = False) -> str:
+    def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None, summary_only: bool = False) -> str:
         """Format detections in Markdown output"""
         if not detections:
             return "🔒 CrashLens runs 100% locally. No data leaves your system.\n\n**No token waste patterns detected! Your GPT usage looks efficient.**"
@@ -46,7 +46,7 @@ class MarkdownFormatter:
         # Summary table
         total_waste_cost = sum(d.get('waste_cost', 0) for d in scrubbed_detections)
         total_waste_tokens = sum(d.get('waste_tokens', 0) for d in scrubbed_detections)
-        total_ai_spend = self._calculate_total_ai_spend(traces)
+        total_ai_spend = self._calculate_total_ai_spend(traces, model_pricing)
         
         # Sanity check: savings shouldn't exceed total spend
         total_waste_cost = min(total_waste_cost, total_ai_spend)
@@ -55,12 +55,23 @@ class MarkdownFormatter:
         output.append("")
         output.append("| Metric | Value |")
         output.append("|--------|-------|")
-        output.append(f"| Total AI Spend | ${total_ai_spend:.2f} |")
+        # Format spend amount appropriately
+        if total_ai_spend >= 0.01:
+            spend_str = f"${total_ai_spend:.2f}"
+        else:
+            spend_str = f"${total_ai_spend:.4f}"
+        
+        output.append(f"| Total AI Spend | {spend_str} |")
         output.append(f"| Total Potential Savings | ${total_waste_cost:.4f} |")
         output.append(f"| Wasted Tokens | {total_waste_tokens:,} |")
         output.append(f"| Issues Found | {len(scrubbed_detections)} |")
         output.append(f"| Traces Analyzed | {len(traces)} |")
         output.append("")
+        
+        # Add cost breakdown sections (if we have real costs)
+        if total_ai_spend > 0:
+            self._add_cost_breakdown_tables(output, traces, summary_only)
+            output.append("")
         
         # Format aggregated detections
         for det_type, group_data in aggregated.items():
@@ -224,20 +235,84 @@ class MarkdownFormatter:
         
         return "\n".join(lines) 
 
-    def _calculate_total_ai_spend(self, traces: Dict[str, List[Dict[str, Any]]]) -> float:
-        """Calculate the total cost of all traces using the pricing config"""
-        from ..cli import load_pricing_config
-        pricing_config = load_pricing_config()
-        model_pricing = pricing_config.get('models', {})
+    def _calculate_total_ai_spend(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None) -> float:
+        """Calculate the total cost of all traces using existing cost field or pricing config"""
         total = 0.0
         for records in traces.values():
             for record in records:
-                model = record.get('model', 'gpt-3.5-turbo')
-                input_tokens = record.get('prompt_tokens', 0)
-                output_tokens = record.get('completion_tokens', 0)
-                model_config = model_pricing.get(model, {})
-                if model_config:
-                    input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
-                    output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
-                    total += input_cost + output_cost
-        return total 
+                # First try to use existing cost field
+                if 'cost' in record and record['cost'] is not None:
+                    total += record['cost']
+                    continue
+                
+                # Fallback to calculating from pricing config
+                if model_pricing:
+                    model = record.get('model', record.get('input', {}).get('model', 'gpt-3.5-turbo'))
+                    
+                    # Get tokens from various possible locations
+                    usage = record.get('usage', {})
+                    input_tokens = (record.get('prompt_tokens') or 
+                                   usage.get('prompt_tokens') or 0)
+                    output_tokens = (record.get('completion_tokens') or 
+                                    usage.get('completion_tokens') or 0)
+                    
+                    model_config = model_pricing.get(model, {})
+                    if model_config:
+                        input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
+                        output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
+                        total += input_cost + output_cost
+        return total
+
+    def _add_cost_breakdown_tables(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool):
+        """Add top expensive traces and cost by model tables"""
+        from collections import defaultdict
+        
+        # Calculate cost breakdown by model
+        model_costs = defaultdict(float)
+        trace_costs = {}
+        
+        for trace_id, records in traces.items():
+            trace_cost = 0.0
+            for record in records:
+                cost = record.get('cost', 0.0)
+                model = record.get('input', {}).get('model', record.get('model', 'unknown'))
+                
+                trace_cost += cost
+                model_costs[model] += cost
+            
+            if trace_cost > 0:
+                trace_costs[trace_id] = trace_cost
+        
+        # Top expensive traces table
+        if trace_costs:
+            output.append("## Top Expensive Traces")
+            output.append("")
+            output.append("| Rank | Trace ID | Model | Cost |")
+            output.append("|------|----------|-------|------|")
+            
+            sorted_traces = sorted(trace_costs.items(), key=lambda x: x[1], reverse=True)[:3]
+            for i, (trace_id, cost) in enumerate(sorted_traces, 1):
+                cost_str = f"${cost:.2f}" if cost >= 0.01 else f"${cost:.4f}"
+                if summary_only:
+                    output.append(f"| {i} | trace_*** | *** | {cost_str} |")
+                else:
+                    # Extract model from first record of this trace
+                    first_record = traces[trace_id][0] if traces[trace_id] else {}
+                    model = first_record.get('input', {}).get('model', first_record.get('model', 'unknown'))
+                    output.append(f"| {i} | {trace_id} | {model} | {cost_str} |")
+            output.append("")
+        
+        # Cost by model table
+        if model_costs:
+            total_cost = sum(model_costs.values())
+            output.append("## Cost by Model")
+            output.append("")
+            output.append("| Model | Cost | Percentage |")
+            output.append("|-------|------|------------|")
+            
+            sorted_models = sorted(model_costs.items(), key=lambda x: x[1], reverse=True)
+            for model, cost in sorted_models:
+                percentage = (cost / total_cost * 100) if total_cost > 0 else 0
+                cost_str = f"${cost:.2f}" if cost >= 0.01 else f"${cost:.4f}"
+                output.append(f"| {model} | {cost_str} | {percentage:.0f}% |")
+            output.append("")

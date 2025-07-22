@@ -18,6 +18,7 @@ from .detectors.fallback_storm import FallbackStormDetector
 from .detectors.fallback_failure import FallbackFailureDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
+from .reporters.summary_formatter import SummaryFormatter
 
 
 @click.group()
@@ -149,13 +150,44 @@ def _format_human_readable(detections: List[Dict[str, Any]], total_waste_cost: f
 
 
 @cli.command()
-@click.argument('log_file', type=click.Path(exists=True, path_type=Path))
+@click.argument('log_file', type=click.Path(exists=True, path_type=Path), required=False)
 @click.option('--format', '-f', 'output_format', 
               type=click.Choice(['slack', 'markdown', 'json', 'human'], case_sensitive=False),
               default='slack', help='Output format')
 @click.option('--config', '-c', type=click.Path(exists=True, path_type=Path),
               help='Path to custom pricing config file (uses built-in config by default)')
-def scan(log_file: Path, output_format: str, config: Optional[Path]):
+@click.option('--demo', is_flag=True, help='🎬 Run analysis on built-in demo data (no file required)')
+@click.option('--stdin', is_flag=True, help='📥 Read JSONL data from standard input')
+@click.option('--paste', is_flag=True, help='📋 Interactive mode: paste JSONL data directly')
+@click.option('--summary', is_flag=True, help='📊 Show cost summary with model and route breakdown')
+@click.option('--summary-only', is_flag=True, help='📋 Summary without trace IDs (safe for sharing)')
+def scan(log_file: Optional[Path], output_format: str, config: Optional[Path], demo: bool, stdin: bool, 
+         paste: bool, summary: bool, summary_only: bool):
+    """Scan JSONL log file for token waste patterns
+    
+    Examples:
+      crashlens scan logs.jsonl              # Scan a specific file
+      crashlens scan --demo                  # Use built-in demo data
+      cat logs.jsonl | crashlens scan --stdin  # Read from pipe
+      crashlens scan --paste                 # Interactive paste mode
+    """
+    
+    # Validate input options
+    input_count = sum([bool(log_file), demo, stdin, paste])
+    if input_count == 0:
+        click.echo("❌ Error: Must specify input source: file path, --demo, --stdin, or --paste")
+        click.echo("💡 Try: crashlens scan --help")
+        sys.exit(1)
+    elif input_count > 1:
+        click.echo("❌ Error: Cannot use multiple input sources simultaneously")
+        click.echo("💡 Choose one: file path, --demo, --stdin, or --paste")
+        sys.exit(1)
+    
+    # Validate summary options
+    if summary and summary_only:
+        click.echo("❌ Error: Cannot use --summary and --summary-only together")
+        click.echo("💡 Choose one: --summary OR --summary-only")
+        sys.exit(1)
     """Scan JSONL log file for token waste patterns"""
     
     try:
@@ -170,12 +202,72 @@ def scan(log_file: Path, output_format: str, config: Optional[Path]):
             click.echo(f"⚠️  Warning: Could not load pricing config from {config_path}: {e}", err=True)
             click.echo("💡 Using default pricing for cost calculations...")
         
-        # Initialize parser
+        # Initialize parser and handle different input sources
         parser = LangfuseParser()
-        traces = parser.parse_file(log_file)
+        traces = {}
+        
+        try:
+            if demo:
+                # Use built-in demo data
+                demo_file = Path(__file__).parent.parent / "examples" / "demo-logs.jsonl"
+                if not demo_file.exists():
+                    click.echo("❌ Error: Demo file not found. Please check installation.")
+                    sys.exit(1)
+                click.echo("🎬 Running analysis on built-in demo data...")
+                traces = parser.parse_file(demo_file)
+            
+            elif stdin:
+                # Read from standard input
+                click.echo("📥 Reading JSONL data from standard input...")
+                try:
+                    traces = parser.parse_stdin()
+                except KeyboardInterrupt:
+                    click.echo("\n⚠️  Input cancelled by user")
+                    sys.exit(1)
+            
+            elif paste:
+                # Interactive paste mode
+                click.echo("Interactive paste mode - Enter JSONL data")
+                click.echo("Paste your JSONL lines below, then press Ctrl+D (Unix) or Ctrl+Z+Enter (Windows) when done:")
+                click.echo("---")
+                try:
+                    lines = []
+                    while True:
+                        try:
+                            line = input()
+                            if line.strip():  # Only add non-empty lines
+                                lines.append(line)
+                        except EOFError:
+                            # User pressed Ctrl+D or Ctrl+Z+Enter
+                            break
+                        except KeyboardInterrupt:
+                            click.echo("\nInput cancelled by user")
+                            sys.exit(1)
+                    
+                    if not lines:
+                        click.echo("No data provided")
+                        sys.exit(1)
+                    
+                    click.echo(f"Processing {len(lines)} lines...")
+                    # Join lines and parse as string
+                    jsonl_text = '\n'.join(lines)
+                    traces = parser.parse_string(jsonl_text)
+                    
+                except Exception as e:
+                    click.echo(f"Error processing pasted data: {e}", err=True)
+                    sys.exit(1)
+            
+            elif log_file:
+                # Read from specified file
+                traces = parser.parse_file(log_file)
+            
+        except Exception as e:
+            click.echo(f"❌ Error reading input: {e}", err=True)
+            sys.exit(1)
         
         if not traces:
-            click.echo("⚠️  No traces found in log file", err=True)
+            source = "demo data" if demo else "standard input" if stdin else "pasted data" if paste else "log file"
+            click.echo(f"⚠️  No traces found in {source}", err=True)
             sys.exit(1)
         
         # Run prioritized detection
@@ -183,6 +275,35 @@ def scan(log_file: Path, output_format: str, config: Optional[Path]):
         
         # Calculate total waste cost
         total_waste_cost = sum(d.get('waste_cost', 0) for d in all_detections)
+        
+        # Handle summary modes
+        if summary or summary_only:
+            # Use SummaryFormatter for cost breakdown
+            summary_formatter = SummaryFormatter()
+            output = summary_formatter.format(traces, pricing_config.get('models', {}), summary_only)
+            
+            # Add detection summary if we have detections
+            if all_detections:
+                output += "\n\n🚨 **Waste Detection Summary**\n"
+                output += f"📊 **Issues Found**: {len(all_detections)}\n"
+                output += f"💰 **Total Potential Savings**: ${total_waste_cost:.6f}\n"
+                
+                # Group detections by type
+                detections_by_type = {}
+                for detection in all_detections:
+                    detector_type = detection.get('type', 'unknown')
+                    if detector_type not in detections_by_type:
+                        detections_by_type[detector_type] = []
+                    detections_by_type[detector_type].append(detection)
+                
+                # Show detection breakdown
+                for detector_type, detections in detections_by_type.items():
+                    display_name = detector_type.replace('_', ' ').title()
+                    waste_cost = sum(d.get('waste_cost', 0) for d in detections)
+                    output += f"  • {display_name}: {len(detections)} issues, ${waste_cost:.6f} potential savings\n"
+            
+            click.echo(output)
+            return
         
         # Output based on format
         if output_format == 'json':
@@ -212,7 +333,7 @@ def scan(log_file: Path, output_format: str, config: Optional[Path]):
             else:
                 formatter = SlackFormatter()
             
-            output = formatter.format(all_detections, traces)
+            output = formatter.format(all_detections, traces, pricing_config.get('models', {}))
             click.echo(output)
         
     except Exception as e:

@@ -296,13 +296,32 @@ def cli():
 @click.command()
 @click.option('--include-suppressed', is_flag=True, help='✅ Include suppressed detections in output for transparency')
 @click.option('--config', type=click.Path(path_type=Path), help='Path to configuration file')
+@click.option('--demo', is_flag=True, help='🎬 Run analysis on built-in demo data (no file required)')
+@click.option('--stdin', is_flag=True, help='📥 Read JSONL data from standard input')
 @click.argument('logfile', type=click.Path(exists=True, path_type=Path), required=False)
-def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, config: Optional[Path] = None) -> str:
+def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, config: Optional[Path] = None, 
+         demo: bool = False, stdin: bool = False) -> str:
     """
     🎯 Scan logs for token waste patterns with production-grade suppression logic
     
     We don't double count waste. We trace root causes — not symptoms.
+    
+    Examples:
+      crashlens scan logs.jsonl              # Scan a specific file
+      crashlens scan --demo                  # Use built-in demo data
+      cat logs.jsonl | crashlens scan --stdin  # Read from pipe
     """
+    
+    # Validate input options
+    input_count = sum([bool(logfile), demo, stdin])
+    if input_count == 0:
+        click.echo("❌ Error: Must specify input source: file path, --demo, or --stdin")
+        click.echo("💡 Try: crashlens scan --help")
+        sys.exit(1)
+    elif input_count > 1:
+        click.echo("❌ Error: Cannot use multiple input sources simultaneously")
+        click.echo("💡 Choose one: file path, --demo, or --stdin")
+        sys.exit(1)
     
     # Load configurations
     pricing_config = load_pricing_config(config)
@@ -311,9 +330,36 @@ def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, confi
     # Initialize suppression engine
     suppression_engine = SuppressionEngine(suppression_config, include_suppressed)
     
-    # Initialize parser and load logs
+    # Initialize parser and load logs based on input source
     parser = LangfuseParser()
-    traces = parser.parse_file(logfile) if logfile else {}
+    traces = {}
+    
+    try:
+        if demo:
+            # Use built-in demo data
+            demo_file = Path(__file__).parent.parent / "examples" / "demo-logs.jsonl"
+            if not demo_file.exists():
+                click.echo("❌ Error: Demo file not found. Please check installation.")
+                sys.exit(1)
+            click.echo("🎬 Running analysis on built-in demo data...")
+            traces = parser.parse_file(demo_file)
+        
+        elif stdin:
+            # Read from standard input
+            click.echo("📥 Reading JSONL data from standard input...")
+            try:
+                traces = parser.parse_stdin()
+            except KeyboardInterrupt:
+                click.echo("\n⚠️  Input cancelled by user")
+                sys.exit(1)
+        
+        elif logfile:
+            # Read from specified file
+            traces = parser.parse_file(logfile)
+        
+    except Exception as e:
+        click.echo(f"❌ Error reading input: {e}", err=True)
+        sys.exit(1)
     
     if not traces:
         click.echo("⚠️  No traces found in input")
