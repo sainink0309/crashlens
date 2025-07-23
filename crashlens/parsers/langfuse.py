@@ -48,14 +48,18 @@ class LangfuseParser:
             'prompt': record.get('input', {}).get('prompt'),
             'prompt_tokens': record.get('usage', {}).get('prompt_tokens'),
             'completion_tokens': record.get('usage', {}).get('completion_tokens'),
+            'cost': record.get('cost'),  # Add cost field
             'metadata.fallback_attempted': record.get('metadata', {}).get('fallback_attempted'),
             'metadata.fallback_reason': record.get('metadata', {}).get('fallback_reason'), # optional
+            'metadata.route': record.get('metadata', {}).get('route'), # Add route field
+            'metadata.team': record.get('metadata', {}).get('team'), # Add team field
             'name': record.get('name'), # optional
             'metadata.source': record.get('metadata', {}).get('source'), # optional
         }
 
     def _parse_lines(self, lines) -> Dict[str, List[Dict[str, Any]]]:
         """Parse lines and group by traceId (newer style)"""
+        required_fields = ['traceId', 'model', 'prompt', 'completion_tokens']
         for line_num, line in enumerate(lines, 1):
             line = line.strip()
             if not line:
@@ -64,6 +68,12 @@ class LangfuseParser:
                 record = json.loads(line)
                 trace_id = record.get('traceId')
                 parsed = self._extract_fields(record)
+                # Check for required fields
+                if parsed:
+                    missing = [f for f in required_fields if not parsed.get(f)]
+                    if missing:
+                        print(f"⚠️  Warning: Missing required field(s) {missing} on line {line_num}. Skipping.")
+                        continue
                 if trace_id and parsed:
                     if trace_id not in self.traces:
                         self.traces[trace_id] = []

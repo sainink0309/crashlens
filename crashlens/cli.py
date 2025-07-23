@@ -2,13 +2,15 @@
 """
 CrashLens CLI - Token Waste Detection Tool
 Scans Langfuse-style JSONL logs for inefficient GPT API usage patterns.
+Production-grade suppression and priority logic for accurate root cause attribution.
 """
 
 import click
 import sys
 import yaml
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from datetime import datetime
+from typing import Optional, Dict, List, Any, Set, Tuple
 
 from .parsers.langfuse import LangfuseParser
 from .detectors.retry_loops import RetryLoopDetector
@@ -18,6 +20,184 @@ from .detectors.overkill_model_detector import OverkillModelDetector
 from .reporters.slack_formatter import SlackFormatter
 from .reporters.markdown_formatter import MarkdownFormatter
 from .reporters.summary_formatter import SummaryFormatter
+
+# 🔢 1. DETECTOR PRIORITIES - Global constant used throughout
+DETECTOR_PRIORITY = {
+    'RetryLoopDetector': 1,      # Highest priority - fundamental issue
+    'FallbackStormDetector': 2,  # Model switching chaos
+    'FallbackFailureDetector': 3, # Unnecessary expensive calls
+    'OverkillModelDetector': 4,   # Overkill for simple tasks - lowest priority
+}
+
+# Detector display names for human-readable output
+DETECTOR_DISPLAY_NAMES = {
+    'RetryLoopDetector': 'Retry Loop',
+    'FallbackStormDetector': 'Fallback Storm', 
+    'FallbackFailureDetector': 'Fallback Failure',
+    'OverkillModelDetector': 'Overkill Model'
+}
+
+
+class SuppressionEngine:
+    """
+    🧰 3. Production-grade suppression engine with trace-level ownership
+    Ensures one "owner" per trace for accurate root cause attribution.
+    """
+    
+    def __init__(self, suppression_config: Optional[Dict[str, Any]] = None, include_suppressed: bool = False):
+        self.suppression_config = suppression_config or {}
+        self.include_suppressed = include_suppressed
+        
+        # 🧠 2. Trace-Level Ownership: {trace_id: claimed_by_detector}
+        self.trace_ownership: Dict[str, str] = {}
+        self.suppressed_detections: List[Dict[str, Any]] = []
+        self.active_detections: List[Dict[str, Any]] = []
+    
+    def process_detections(self, detector_name: str, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Process detections with suppression logic
+        Returns active detections, stores suppressed ones
+        """
+        active = []
+        
+        for detection in detections:
+            trace_id = detection.get('trace_id')
+            if not trace_id:
+                active.append(detection)  # No trace_id, can't suppress
+                continue
+            
+            # Check if this detector is suppressed by configuration
+            if self._is_detector_suppressed(detector_name, trace_id):
+                self._add_suppressed_detection(detection, detector_name, "disabled_by_config")
+                continue
+            
+            # Check trace ownership and priority (only if not disabled by config)
+            if trace_id in self.trace_ownership:
+                current_owner = self.trace_ownership[trace_id]
+                current_priority = DETECTOR_PRIORITY.get(detector_name, 999)
+                owner_priority = DETECTOR_PRIORITY.get(current_owner, 999)
+                
+                # 🧰 3. Suppression Hook: Priority-based suppression (configurable)
+                if self._should_suppress_by_priority(detector_name, current_priority, owner_priority):
+                    # Current detector has lower priority, suppress this detection
+                    self._add_suppressed_detection(detection, detector_name, f"higher_priority_detector:{current_owner}")
+                    continue
+                elif current_priority < owner_priority:
+                    # Current detector has higher priority, it takes ownership
+                    # Move previous owner's detections to suppressed (only if priority suppression enabled)
+                    if self._should_suppress_by_priority(current_owner, owner_priority, current_priority):
+                        self._transfer_ownership(trace_id, current_owner, detector_name)
+            
+            # This detection is active - claim ownership
+            self.trace_ownership[trace_id] = detector_name
+            detection['suppressed_by'] = None  # Mark as not suppressed
+            active.append(detection)
+        
+        # Store active detections for this detector
+        self.active_detections.extend(active)
+        return active
+    
+    def _is_detector_suppressed(self, detector_name: str, trace_id: str) -> bool:
+        """Check if detector is suppressed by configuration"""
+        # Get the detector config (remove 'Detector' suffix and convert to lowercase)
+        config_key = detector_name.lower().replace('detector', '').replace('_', '')
+        if config_key in ['retryloop']:
+            config_key = 'retry_loop'
+        elif config_key == 'fallbackstorm':
+            config_key = 'fallback_storm'
+        elif config_key == 'fallbackfailure':
+            config_key = 'fallback_failure'
+        elif config_key == 'overkillmodel':
+            config_key = 'overkill_model'
+        
+        detector_config = self.suppression_config.get(config_key, {})
+        
+        # Check suppression rules
+        if detector_config.get('suppress_if_retry_loop', False):
+            return self.trace_ownership.get(trace_id) == 'RetryLoopDetector'
+        
+        return False
+    
+    def _should_suppress_by_priority(self, detector_name: str, current_priority: int, owner_priority: int) -> bool:
+        """Check if detector should be suppressed by priority logic"""
+        # Get the detector config
+        config_key = detector_name.lower().replace('detector', '').replace('_', '')
+        if config_key in ['retryloop']:
+            config_key = 'retry_loop'
+        elif config_key == 'fallbackstorm':
+            config_key = 'fallback_storm'
+        elif config_key == 'fallbackfailure':
+            config_key = 'fallback_failure'
+        elif config_key == 'overkillmodel':
+            config_key = 'overkill_model'
+        
+        detector_config = self.suppression_config.get(config_key, {})
+        
+        # If suppress_if_retry_loop is False, allow coexistence (no priority suppression)
+        if not detector_config.get('suppress_if_retry_loop', True):
+            return False
+        
+        # Otherwise, use priority suppression
+        return current_priority > owner_priority
+    
+    def _add_suppressed_detection(self, detection: Dict[str, Any], detector_name: str, reason: str):
+        """Add detection to suppressed list with metadata"""
+        suppressed = detection.copy()
+        suppressed['suppressed_by'] = detector_name
+        suppressed['suppression_reason'] = reason
+        suppressed['detector'] = detector_name
+        self.suppressed_detections.append(suppressed)
+    
+    def _transfer_ownership(self, trace_id: str, old_owner: str, new_owner: str):
+        """Transfer ownership and move old detections to suppressed"""
+        # Find active detections from old owner for this trace
+        to_suppress = []
+        remaining_active = []
+        
+        for detection in self.active_detections:
+            if detection.get('trace_id') == trace_id and detection.get('type', '').replace('_', '').replace(' ', '').lower() in old_owner.lower():
+                to_suppress.append(detection)
+            else:
+                remaining_active.append(detection)
+        
+        # Move old detections to suppressed
+        for detection in to_suppress:
+            self._add_suppressed_detection(detection, old_owner, f"superseded_by:{new_owner}")
+        
+        self.active_detections = remaining_active
+    
+    def get_suppression_summary(self) -> Dict[str, Any]:
+        """Generate suppression summary for transparency"""
+        total_traces = len(set(d.get('trace_id') for d in self.active_detections + self.suppressed_detections if d.get('trace_id')))
+        active_issues = len(self.active_detections)
+        suppressed_count = len(self.suppressed_detections)
+        
+        # Group suppressed by reason
+        suppression_breakdown = {}
+        for detection in self.suppressed_detections:
+            reason = detection.get('suppression_reason', 'unknown')
+            suppression_breakdown[reason] = suppression_breakdown.get(reason, 0) + 1
+        
+        return {
+            'total_traces_analyzed': total_traces,
+            'active_issues': active_issues,
+            'suppressed_issues': suppressed_count,
+            'suppression_breakdown': suppression_breakdown,
+            'trace_ownership': self.trace_ownership.copy()
+        }
+
+
+def load_suppression_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
+    """📜 4. Load suppression rules from crashlens-policy.yaml"""
+    if config_path is None:
+        config_path = Path(__file__).parent / "config" / "crashlens-policy.yaml"
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            policy = yaml.safe_load(f)
+            return policy.get('suppression_rules', {})
+    except Exception:
+        return {}  # Default to no suppression rules
 
 
 def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -33,209 +213,222 @@ def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         return {}
 
 
-def scan_logs(logfile: Optional[Path] = None, demo: bool = False, config_path: Optional[Path] = None, 
-              stdin: bool = False, paste: bool = False, summary: bool = False, output_format: str = 'slack', summary_only: bool = False, dry_run_policy: bool = False) -> str:
-    """
-    🎯 Scan logs for token waste patterns
+def _generate_transparent_output(active_detections: List[Dict[str, Any]], 
+                                suppression_engine: SuppressionEngine, 
+                                summary: Dict[str, Any]) -> str:
+    """📊 5. Generate human-centric output with transparency"""
     
-    Load JSONL lines → Group by trace_id → Run 3 hardcoded detectors → 
-    Estimate cost → Output in Slack-style format
-    """
+    formatter = SummaryFormatter()
     
-    # Load pricing configuration
-    pricing_config = load_pricing_config(config_path)
+    # Calculate totals
+    total_waste_cost = sum(d.get('waste_cost', 0) for d in active_detections)
+    total_waste_tokens = sum(d.get('waste_tokens', 0) for d in active_detections)
     
-    # Initialize parser and load logs
-    parser = LangfuseParser()
-    
-    if stdin:
-        traces = parser.parse_stdin()
-    elif paste:
-        import pyperclip
-        try:
-            text = pyperclip.paste()
-            traces = parser.parse_string(text)
-        except Exception as e:
-            return f"❌ Error reading from clipboard: {e}"
-    elif logfile:
-        traces = parser.parse_file(logfile)
-    else:
-        return "❌ Error: No input source specified"
-    
-    if not traces:
-        return "⚠️  No traces found in input"
-    
-    # Initialize detectors with config thresholds
-    thresholds = pricing_config.get('thresholds', {})
-
-    fallback_detector = FallbackFailureDetector(
-        time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 15),
-        similarity_threshold=thresholds.get('fallback_failure', {}).get('similarity_threshold', 0.8)
-    )
-    gpt4_short = thresholds.get('gpt4_short', {})
-    min_tokens = gpt4_short.get('min_tokens_for_gpt4')
-    if min_tokens is None:
-        raise ValueError("min_tokens_for_gpt4 must be set in pricing.yaml under thresholds.gpt4_short")
-    overkill_detector = OverkillModelDetector(
-        min_tokens_for_gpt4=min_tokens
-    )
-    # Other detectors can be added here as needed
-
-    # Run fallback failure detector first
-    fallback_detections = fallback_detector.detect(traces, pricing_config.get('models', {}))
-    # Add waste_cost and waste_tokens to fallback detections
-    for det in fallback_detections:
-        waste_tokens = 0
-        waste_cost = 0.0
-        for rec in det.get('records', []):
-            waste_tokens += rec.get('completion_tokens', 0)
-            model = rec.get('model', 'gpt-3.5-turbo')
-            input_tokens = rec.get('prompt_tokens', 0)
-            output_tokens = rec.get('completion_tokens', 0)
-            model_config = pricing_config.get('models', {}).get(model, {})
-            if model_config:
-                input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
-                output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
-                waste_cost += input_cost + output_cost
-        det['waste_tokens'] = waste_tokens
-        det['waste_cost'] = waste_cost
-
-    fallback_trace_ids = {d['trace_id'] for d in fallback_detections}
-
-    # Run overkill detector only on traces without fallback failures
-    traces_without_fallback = {tid: recs for tid, recs in traces.items() if tid not in fallback_trace_ids}
-    overkill_detections = overkill_detector.detect(traces_without_fallback, pricing_config.get('models', {}))
-
-    # Run other detectors as before (if needed)
-    detectors = [
-        RetryLoopDetector(
-            max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
-            time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
-            similarity_threshold=thresholds.get('retry_loop', {}).get('similarity_threshold', 0.9)
-        ),
-        FallbackStormDetector(
-            fallback_threshold=thresholds.get('fallback_storm', {}).get('fallback_threshold', 3),
-            time_window_minutes=thresholds.get('fallback_storm', {}).get('time_window_minutes', 10)
-        )
+    # Build report
+    lines = [
+        "🚨 **CrashLens Token Waste Report**",
+        "=" * 50,
+        f"📅 **Analysis Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"🔍 **Traces Analyzed**: {summary['total_traces_analyzed']}",
+        f"🧾 **Total AI Spend**: ${total_waste_cost:.2f}",
+        f"💰 **Total Potential Savings**: ${total_waste_cost:.4f}",
+        f"🎯 **Wasted Tokens**: {total_waste_tokens}",
+        f"📊 **Issues Found**: {summary['active_issues']}"
     ]
-
-    all_detections = []
-    detector_results = []
-    # Add prioritized detectors first
-    all_detections.extend(fallback_detections)
-    detector_results.append(("FallbackFailureDetector", fallback_detections))
-    all_detections.extend(overkill_detections)
-    detector_results.append(("OverkillModelDetector", overkill_detections))
-    # Add other detectors
-    for detector in detectors:
-        if hasattr(detector, 'detect') and 'model_pricing' in detector.detect.__code__.co_varnames:
-            detections = detector.detect(traces, pricing_config.get('models', {}))
-        else:
-            detections = detector.detect(traces)
-        all_detections.extend(detections)
-        detector_results.append((detector.__class__.__name__, detections))
-
-    # Handle dry-run-policy mode
-    if dry_run_policy:
-        dry_run_lines = []
-        any_triggered = False
-        for rule_name, detections in detector_results:
-            if detections:
-                dry_run_lines.append(f"[DRY RUN] Detected: {rule_name.replace('Detector','').replace('_',' ')} ({len(detections)} matches)")
-                any_triggered = True
-            else:
-                dry_run_lines.append(f"[DRY RUN] No {rule_name.replace('Detector','').replace('_',' ')} detected")
-        if not any_triggered:
-            return "[DRY RUN] No detection rules would trigger on this data."
-        return "\n".join(dry_run_lines)
     
-    # Handle summary mode
-    if summary:
-        formatter = SummaryFormatter()
-        output = formatter.format(traces, pricing_config.get('models', {}), summary_only=summary_only)
-        return output
+    # Group detections by type for reporting
+    detections_by_type = {}
+    for detection in active_detections:
+        detector_name = detection.get('type', 'unknown')
+        if detector_name not in detections_by_type:
+            detections_by_type[detector_name] = []
+        detections_by_type[detector_name].append(detection)
     
-    # Estimate costs using pricing config
-    if pricing_config.get('models'):
-        for detection in all_detections:
-            detection['estimated_cost'] = estimate_detection_cost(detection, pricing_config['models'])
-    
-    # Format output using selected formatter
-    if output_format == 'markdown':
-        formatter = MarkdownFormatter()
-    else:
-        formatter = SlackFormatter()
-    output = formatter.format(all_detections, traces, summary_only=summary_only)
-    
-    return output
-
-
-def estimate_detection_cost(detection: Dict[str, Any], model_pricing: Dict[str, Any]) -> float:
-    """Estimate cost for a detection based on model pricing"""
-    total_cost = 0.0
-    
-    for record in detection.get('records', []):
-        model = record.get('model', 'gpt-3.5-turbo')
-        input_tokens = record.get('prompt_tokens', 0)
-        output_tokens = record.get('completion_tokens', 0)
+    # Add detection details
+    for detector_type, detections in detections_by_type.items():
+        if not detections:
+            continue
         
-        # Find model pricing
-        model_config = model_pricing.get(model, {})
-        if model_config:
-            input_cost = (input_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
-            output_cost = (output_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
-            total_cost += input_cost + output_cost
+        display_name = DETECTOR_DISPLAY_NAMES.get(detector_type + 'Detector', detector_type.title())
+        icon = {"retry_loop": "🔄", "fallback_storm": "⚡", "fallback_failure": "📢", "overkill_model": "❓"}.get(detector_type, "⚠️")
+        
+        lines.append(f"{icon} **{display_name}** ({len(detections)} issues)")
+        
+        sample_prompts = [d.get('sample_prompt', '')[:30] + '...' for d in detections[:2] if d.get('sample_prompt')]
+        if sample_prompts:
+            lines.append(f"  • Sample prompts: {', '.join(sample_prompts)}")
+        
+        waste_cost = sum(d.get('waste_cost', 0) for d in detections)
+        if waste_cost > 0:
+            lines.append(f"  • Est. waste: ${waste_cost:.4f}")
     
-    return total_cost
+    # ✅ Bonus: Show suppression summary for transparency
+    if summary['suppressed_issues'] > 0:
+        lines.append("")
+        lines.append("🛑 **Suppression Summary**")
+        lines.append(f"  • {summary['suppressed_issues']} issues suppressed by higher-priority detectors")
+        
+        # Show suppressed detections if requested
+        if suppression_engine.include_suppressed:
+            lines.append("")
+            lines.append("📋 **Suppressed Detections** (for transparency)")
+            for detection in suppression_engine.suppressed_detections:
+                trace_id = detection.get('trace_id', 'unknown')
+                reason = detection.get('suppression_reason', 'unknown')
+                detector = detection.get('detector', 'unknown')
+                lines.append(f"  ⚠️ {DETECTOR_DISPLAY_NAMES.get(detector, detector)} suppressed for trace {trace_id}")
+                lines.append(f"     Reason: {reason.replace('_', ' ').replace(':', ' by ')}")
+    
+    # Monthly projection
+    monthly_savings = total_waste_cost * 30
+    lines.append(f"📈 **Monthly Projection**: ${monthly_savings:.2f} potential savings")
+    
+    return "\n".join(lines)
 
 
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
-    """CrashLens - Detect token waste in GPT API logs"""
+    """CrashLens - Detect token waste in GPT API logs with production-grade suppression"""
     pass
 
 
-@cli.command()
-@click.argument('log_file', type=click.Path(exists=True, path_type=Path), required=False)
-@click.option('--format', '-f', 'output_format', 
-              type=click.Choice(['slack', 'markdown'], case_sensitive=False),
-              default='slack', help='Output format')
-@click.option('--config', '-c', type=click.Path(exists=True, path_type=Path),
-              help='Path to pricing config file')
-@click.option('--demo', is_flag=True, help='Run in demo mode with sample data')
-@click.option('--stdin', is_flag=True, help='Read logs from stdin')
-@click.option('--paste', is_flag=True, help='Read logs from clipboard')
-@click.option('--summary', is_flag=True, help='Show cost summary by route, model, and team')
-@click.option('--summary-only', is_flag=True, help='Suppress prompts, sample inputs, and trace IDs for safe internal reports')
-@click.option('--output', type=click.Path(writable=True, path_type=Path), help='Save report to a file instead of printing to stdout')
-@click.option('--dry-run-policy', is_flag=True, help='Show which detection rules would trigger, without blocking or exiting')
-def scan(log_file: Optional[Path], output_format: str, config: Optional[Path], demo: bool, stdin: bool, paste: bool, summary: bool, summary_only: bool, dry_run_policy: bool, output: Optional[Path]):
-    """Scan JSONL log file for token waste patterns"""
+@click.command()
+@click.option('--include-suppressed', is_flag=True, help='✅ Include suppressed detections in output for transparency')
+@click.option('--config', type=click.Path(path_type=Path), help='Path to configuration file')
+@click.option('--demo', is_flag=True, help='🎬 Run analysis on built-in demo data (no file required)')
+@click.option('--stdin', is_flag=True, help='📥 Read JSONL data from standard input')
+@click.argument('logfile', type=click.Path(exists=True, path_type=Path), required=False)
+def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, config: Optional[Path] = None, 
+         demo: bool = False, stdin: bool = False) -> str:
+    """
+    🎯 Scan logs for token waste patterns with production-grade suppression logic
     
-    # Check for conflicts
-    if (stdin or paste) and log_file:
-        raise click.UsageError("Cannot use file input with --stdin or --paste.")
+    We don't double count waste. We trace root causes — not symptoms.
     
-    if stdin and paste:
-        raise click.UsageError("Cannot use both --stdin and --paste.")
+    Examples:
+      crashlens scan logs.jsonl              # Scan a specific file
+      crashlens scan --demo                  # Use built-in demo data
+      cat logs.jsonl | crashlens scan --stdin  # Read from pipe
+    """
     
-    if not log_file and not stdin and not paste:
-        raise click.UsageError("Must specify either a log file, --stdin, or --paste.")
+    # Validate input options
+    input_count = sum([bool(logfile), demo, stdin])
+    if input_count == 0:
+        click.echo("❌ Error: Must specify input source: file path, --demo, or --stdin")
+        click.echo("💡 Try: crashlens scan --help")
+        sys.exit(1)
+    elif input_count > 1:
+        click.echo("❌ Error: Cannot use multiple input sources simultaneously")
+        click.echo("💡 Choose one: file path, --demo, or --stdin")
+        sys.exit(1)
+    
+    # Load configurations
+    pricing_config = load_pricing_config(config)
+    suppression_config = load_suppression_config(config)
+    
+    # Initialize suppression engine
+    suppression_engine = SuppressionEngine(suppression_config, include_suppressed)
+    
+    # Initialize parser and load logs based on input source
+    parser = LangfuseParser()
+    traces = {}
     
     try:
-        # Use the new scan_logs function
-        output_text = scan_logs(logfile=log_file, demo=demo, config_path=config, stdin=stdin, paste=paste, summary=summary, output_format=output_format, summary_only=summary_only, dry_run_policy=dry_run_policy)
-        if output:
-            output.write_text(output_text, encoding='utf-8')
-            click.echo(f"Report saved to {output}")
-        else:
-            click.echo(output_text)
+        if demo:
+            # Use built-in demo data
+            demo_file = Path(__file__).parent.parent / "examples" / "demo-logs.jsonl"
+            if not demo_file.exists():
+                click.echo("❌ Error: Demo file not found. Please check installation.")
+                sys.exit(1)
+            click.echo("🎬 Running analysis on built-in demo data...")
+            traces = parser.parse_file(demo_file)
+        
+        elif stdin:
+            # Read from standard input
+            click.echo("📥 Reading JSONL data from standard input...")
+            try:
+                traces = parser.parse_stdin()
+            except KeyboardInterrupt:
+                click.echo("\n⚠️  Input cancelled by user")
+                sys.exit(1)
+        
+        elif logfile:
+            # Read from specified file
+            traces = parser.parse_file(logfile)
         
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        click.echo(f"❌ Error reading input: {e}", err=True)
         sys.exit(1)
+    
+    if not traces:
+        click.echo("⚠️  No traces found in input")
+        return ""
+    
+    click.echo("🔒 CrashLens runs 100% locally. No data leaves your system.")
+    
+    # Load thresholds from pricing config
+    thresholds = pricing_config.get('thresholds', {})
+    
+    # 🔢 1. Run detectors in priority order with suppression
+    detector_configs = [
+        ('RetryLoopDetector', RetryLoopDetector(
+            max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
+            time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
+            max_retry_interval_minutes=thresholds.get('retry_loop', {}).get('max_retry_interval_minutes', 2)
+        )),
+        ('FallbackStormDetector', FallbackStormDetector(
+            min_calls=thresholds.get('fallback_storm', {}).get('min_calls', 3),
+            min_models=thresholds.get('fallback_storm', {}).get('min_models', 2),
+            max_trace_window_minutes=thresholds.get('fallback_storm', {}).get('max_trace_window_minutes', 3)
+        )),
+        ('FallbackFailureDetector', FallbackFailureDetector(
+            time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 300)
+        )),
+        ('OverkillModelDetector', OverkillModelDetector(
+            max_prompt_tokens=thresholds.get('overkill_model', {}).get('max_prompt_tokens', 20),
+            max_prompt_chars=thresholds.get('overkill_model', {}).get('max_prompt_chars', 150)
+        ))
+    ]
+    
+    all_active_detections = []
+    
+    # Process each detector in priority order
+    for detector_name, detector in detector_configs:
+        try:
+            # Run detector
+            if hasattr(detector, 'detect'):
+                if 'already_flagged_ids' in detector.detect.__code__.co_varnames:
+                    # Detector supports suppression
+                    already_flagged = set(suppression_engine.trace_ownership.keys())
+                    raw_detections = detector.detect(traces, pricing_config.get('models', {}), already_flagged)
+                else:
+                    # Basic detector
+                    raw_detections = detector.detect(traces, pricing_config.get('models', {}))
+            else:
+                raw_detections = []
+            
+            # Process through suppression engine
+            active_detections = suppression_engine.process_detections(detector_name, raw_detections)
+            all_active_detections.extend(active_detections)
+            
+        except Exception as e:
+            click.echo(f"⚠️  Warning: {detector_name} failed: {e}", err=True)
+            continue
+    
+    # Get suppression summary
+    summary = suppression_engine.get_suppression_summary()
+    
+    # Generate output with transparency
+    output = _generate_transparent_output(all_active_detections, suppression_engine, summary)
+    
+    click.echo(output)
+    return output
 
 
-if __name__ == '__main__':
-    cli() 
+# Add the scan command to CLI
+cli.add_command(scan)
+
+
+if __name__ == "__main__":
+    cli()
