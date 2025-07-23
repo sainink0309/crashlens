@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import click
 
 
 class LangfuseParser:
@@ -70,16 +71,16 @@ class LangfuseParser:
                 parsed = self._extract_fields(record)
                 # Check for required fields
                 if parsed:
-                    missing = [f for f in required_fields if not parsed.get(f)]
+                    missing = [f for f in required_fields if parsed.get(f) is None]
                     if missing:
-                        print(f"⚠️  Warning: Missing required field(s) {missing} on line {line_num}. Skipping.")
+                        click.echo(f"⚠️  Warning: Missing required field(s) {missing} on line {line_num}. Skipping.", err=True)
                         continue
                 if trace_id and parsed:
                     if trace_id not in self.traces:
                         self.traces[trace_id] = []
                     self.traces[trace_id].append(parsed)
             except json.JSONDecodeError as e:
-                print(f"⚠️  Warning: Invalid JSON on line {line_num}: {e}")
+                click.echo(f"⚠️  Warning: Invalid JSON on line {line_num}: {e}", err=True)
                 continue
         return self.traces
     

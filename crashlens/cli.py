@@ -298,7 +298,7 @@ def cli():
 @click.option('--config', type=click.Path(path_type=Path), help='Path to configuration file')
 @click.option('--demo', is_flag=True, help='🎬 Run analysis on built-in demo data (no file required)')
 @click.option('--stdin', is_flag=True, help='📥 Read JSONL data from standard input')
-@click.argument('logfile', type=click.Path(exists=True, path_type=Path), required=False)
+@click.argument('logfile', type=click.Path(path_type=Path), required=False)
 def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, config: Optional[Path] = None, 
          demo: bool = False, stdin: bool = False) -> str:
     """
@@ -321,6 +321,11 @@ def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, confi
     elif input_count > 1:
         click.echo("❌ Error: Cannot use multiple input sources simultaneously")
         click.echo("💡 Choose one: file path, --demo, or --stdin")
+        sys.exit(1)
+
+    # File existence check for logfile
+    if logfile and not logfile.exists():
+        click.echo(f"❌ Error: File not found: {logfile}", err=True)
         sys.exit(1)
     
     # Load configurations
@@ -360,7 +365,75 @@ def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, confi
     except Exception as e:
         click.echo(f"❌ Error reading input: {e}", err=True)
         sys.exit(1)
+    
+    if not traces:
+        click.echo("⚠️  No traces found in input")
+        return ""
+    
+    click.echo("🔒 CrashLens runs 100% locally. No data leaves your system.")
+    
+    # Load thresholds from pricing config
+    thresholds = pricing_config.get('thresholds', {})
+    
+    # 🔢 1. Run detectors in priority order with suppression
+    detector_configs = [
+        ('RetryLoopDetector', RetryLoopDetector(
+            max_retries=thresholds.get('retry_loop', {}).get('max_retries', 3),
+            time_window_minutes=thresholds.get('retry_loop', {}).get('time_window_minutes', 5),
+            max_retry_interval_minutes=thresholds.get('retry_loop', {}).get('max_retry_interval_minutes', 2)
+        )),
+        ('FallbackStormDetector', FallbackStormDetector(
+            min_calls=thresholds.get('fallback_storm', {}).get('min_calls', 3),
+            min_models=thresholds.get('fallback_storm', {}).get('min_models', 2),
+            max_trace_window_minutes=thresholds.get('fallback_storm', {}).get('max_trace_window_minutes', 3)
+        )),
+        ('FallbackFailureDetector', FallbackFailureDetector(
+            time_window_seconds=thresholds.get('fallback_failure', {}).get('time_window_seconds', 300)
+        )),
+        ('OverkillModelDetector', OverkillModelDetector(
+            max_prompt_tokens=thresholds.get('overkill_model', {}).get('max_prompt_tokens', 20),
+            max_prompt_chars=thresholds.get('overkill_model', {}).get('max_prompt_chars', 150)
+        ))
+    ]
+    
+    all_active_detections = []
+    
+    # Process each detector in priority order
+    for detector_name, detector in detector_configs:
+        try:
+            # Run detector
+            if hasattr(detector, 'detect'):
+                if 'already_flagged_ids' in detector.detect.__code__.co_varnames:
+                    # Detector supports suppression
+                    already_flagged = set(suppression_engine.trace_ownership.keys())
+                    raw_detections = detector.detect(traces, pricing_config.get('models', {}), already_flagged)
+                else:
+                    # Basic detector
+                    raw_detections = detector.detect(traces, pricing_config.get('models', {}))
+            else:
+                raw_detections = []
+            
+            # Process through suppression engine
+            active_detections = suppression_engine.process_detections(detector_name, raw_detections)
+            all_active_detections.extend(active_detections)
+            
+        except Exception as e:
+            click.echo(f"⚠️  Warning: {detector_name} failed: {e}", err=True)
+            continue
+    
+    # Get suppression summary
+    summary = suppression_engine.get_suppression_summary()
+    
+    # Generate output with transparency
+    output = _generate_transparent_output(all_active_detections, suppression_engine, summary)
+    
+    click.echo(output)
+    return output
 
 
-if __name__ == '__main__':
-    cli() 
+# Add the scan command to CLI
+cli.add_command(scan)
+
+
+if __name__ == "__main__":
+    cli()
