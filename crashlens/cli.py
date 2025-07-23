@@ -298,7 +298,7 @@ def cli():
 @click.option('--config', type=click.Path(path_type=Path), help='Path to configuration file')
 @click.option('--demo', is_flag=True, help='🎬 Run analysis on built-in demo data (no file required)')
 @click.option('--stdin', is_flag=True, help='📥 Read JSONL data from standard input')
-@click.argument('logfile', type=click.Path(exists=True, path_type=Path), required=False)
+@click.argument('logfile', type=click.Path(path_type=Path), required=False)
 def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, config: Optional[Path] = None, 
          demo: bool = False, stdin: bool = False) -> str:
     """
@@ -321,6 +321,11 @@ def scan(logfile: Optional[Path] = None, include_suppressed: bool = False, confi
     elif input_count > 1:
         click.echo("❌ Error: Cannot use multiple input sources simultaneously")
         click.echo("💡 Choose one: file path, --demo, or --stdin")
+        sys.exit(1)
+
+    # File existence check for logfile
+    if logfile and not logfile.exists():
+        click.echo(f"❌ Error: File not found: {logfile}", err=True)
         sys.exit(1)
     
     # Load configurations
