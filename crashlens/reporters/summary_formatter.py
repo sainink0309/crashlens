@@ -16,7 +16,7 @@ class SummaryFormatter:
         self.pii_scrubber = PIIScrubber()
     
     def format(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Dict[str, Any], summary_only: bool = False) -> str:
-        """Format cost summary from traces"""
+        """Format cost summary from traces using compact FinOps format"""
         if not traces:
             return "🔒 CrashLens runs 100% locally. No data leaves your system.\nℹ️  No traces found for summary"
         
@@ -24,88 +24,82 @@ class SummaryFormatter:
         output.append("🔒 CrashLens runs 100% locally. No data leaves your system.")
         if summary_only:
             output.append("📝 Summary-only mode: Trace IDs are suppressed for safe internal sharing.")
-        output.append("📊 **CrashLens Cost Summary**")
-        output.append("=" * 50)
         
-        # Add analysis metadata
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        output.append(f"📅 **Analysis Date**: {current_time}")
-        output.append(f"🔍 **Traces Analyzed**: {len(traces):,}")
-        output.append("")
-        
-        # Scrub PII from traces
-        scrubbed_traces = self.pii_scrubber.scrub_traces(traces)
-        
-        # Aggregate data
-        route_costs = defaultdict(float)
-        model_costs = defaultdict(float)
-        team_costs = defaultdict(float)
+        # Calculate totals first
         total_cost = 0.0
         total_tokens = 0
+        model_costs = defaultdict(float)
         
-        # Process all traces
-        for trace_id, records in scrubbed_traces.items():
+        # Process all traces for totals
+        for trace_id, records in traces.items():
             for record in records:
-                # Calculate cost for this record
                 cost = self._calculate_record_cost(record, model_pricing)
-                tokens = record.get('completion_tokens', 0) + record.get('prompt_tokens', 0)
-                
-                # Extract metadata
-                route = record.get('route', 'unknown')
-                model = record.get('model', 'unknown')
-                team = record.get('metadata', {}).get('team', 'unknown')
-                
-                # Aggregate by categories
-                route_costs[route] += cost
-                model_costs[model] += cost
-                team_costs[team] += cost
                 total_cost += cost
-                total_tokens += tokens
+                
+                # Get tokens from multiple possible locations
+                usage = record.get('usage', {})
+                prompt_tokens = (usage.get('prompt_tokens', 0) or 
+                               record.get('prompt_tokens', 0) or 0)
+                completion_tokens = (usage.get('completion_tokens', 0) or 
+                                   record.get('completion_tokens', 0) or 0)
+                total_tokens += prompt_tokens + completion_tokens
+                
+                # Track model costs
+                model = record.get('input', {}).get('model', record.get('model', 'unknown'))
+                model_costs[model] += cost
         
-        # Summary stats
-        output.append(f"💰 **Total Cost**: ${total_cost:.4f}")
-        output.append(f"🎯 **Total Tokens**: {total_tokens:,}")
-        output.append(f"📈 **Total Traces**: {len(scrubbed_traces)}")
+        # Generate compact header (similar to Slack format)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cost_str = f"${total_cost:.4f}" if total_cost < 0.01 else f"${total_cost:.2f}"
+        
+        # Only show tokens if we have a meaningful count, otherwise suppress the field
+        if total_tokens > 0:
+            output.append(f"📊 CrashLens Summary – {timestamp} | Traces: {len(traces)} | Cost: {cost_str} | Tokens: {total_tokens:,}")
+        else:
+            output.append(f"📊 CrashLens Summary – {timestamp} | Traces: {len(traces)} | Cost: {cost_str}")
         output.append("")
         
-        # Route breakdown
-        if len(route_costs) > 1 or 'unknown' not in route_costs:
-            output.append("🛣️  **Cost by Route**")
-            for route, cost in sorted(route_costs.items(), key=lambda x: x[1], reverse=True):
+        # Model breakdown - compact format
+        if model_costs:
+            sorted_models = sorted(model_costs.items(), key=lambda x: x[1], reverse=True)
+            model_parts = []
+            for model, cost in sorted_models:
+                cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                 percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-                output.append(f"  {route}: ${cost:.4f} ({percentage:.1f}%)")
-            output.append("")
+                model_parts.append(f"{model}: {cost_str} ({percentage:.0f}%)")
+            
+            output.append(f"🤖 Model Breakdown: {' | '.join(model_parts)}")
         
-        # Model breakdown
-        output.append("🤖 **Cost by Model**")
-        for model, cost in sorted(model_costs.items(), key=lambda x: x[1], reverse=True):
-            percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-            output.append(f"  {model}: ${cost:.4f} ({percentage:.1f}%)")
-        output.append("")
-        
-        # Team breakdown (if available)
-        if len(team_costs) > 1 or 'unknown' not in team_costs:
-            output.append("👥 **Cost by Team**")
-            for team, cost in sorted(team_costs.items(), key=lambda x: x[1], reverse=True):
-                percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-                output.append(f"  {team}: ${cost:.4f} ({percentage:.1f}%)")
-            output.append("")
-        
-        # Top expensive traces (suppress trace IDs in summary_only)
-        trace_costs = {}
-        for trace_id, records in scrubbed_traces.items():
-            trace_cost = sum(self._calculate_record_cost(record, model_pricing) for record in records)
-            trace_costs[trace_id] = trace_cost
-        
-        if trace_costs:
-            output.append("🏆 **Top 5 Most Expensive Traces**")
-            for i, (trace_id, cost) in enumerate(sorted(trace_costs.items(), key=lambda x: x[1], reverse=True)[:5], 1):
-                if summary_only:
-                    output.append(f"  Trace #{i}: ${cost:.4f}")
-                else:
-                    output.append(f"  {trace_id}: ${cost:.4f}")
+        # Top expensive traces
+        self._add_top_traces_summary(output, traces, summary_only)
         
         return "\n".join(output)
+
+    def _add_top_traces_summary(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool):
+        """Add compact top traces section"""
+        trace_costs = {}
+        
+        for trace_id, records in traces.items():
+            trace_cost = sum(record.get('cost', 0.0) for record in records)
+            if trace_cost > 0:
+                trace_costs[trace_id] = trace_cost
+        
+        if trace_costs:
+            sorted_traces = sorted(trace_costs.items(), key=lambda x: x[1], reverse=True)[:5]  # Top 5 for summary
+            trace_lines = []
+            
+            for i, (trace_id, cost) in enumerate(sorted_traces, 1):
+                cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
+                if summary_only:
+                    trace_lines.append(f"#{i}: {cost_str}")
+                else:
+                    # Get model from first record
+                    first_record = traces[trace_id][0] if traces[trace_id] else {}
+                    model = first_record.get('input', {}).get('model', first_record.get('model', 'unknown'))
+                    trace_lines.append(f"#{i}: {trace_id[:8]}... → {model} → {cost_str}")
+            
+            output.append("")
+            output.append(f"🏆 Top {len(trace_lines)} Traces: " + " | ".join(trace_lines))
     
     def _calculate_record_cost(self, record: Dict[str, Any], model_pricing: Dict[str, Any]) -> float:
         """Calculate cost for a single record"""
