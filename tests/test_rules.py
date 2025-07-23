@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
 
 from crashlens.detectors.retry_loops import RetryLoopDetector
-from crashlens.detectors.overkill_model_detector import OverkillModelDetector
 from crashlens.detectors.fallback_storm import FallbackStormDetector
 
 
@@ -58,17 +57,18 @@ class TestRetryLoopDetector(unittest.TestCase):
         self.assertEqual(len(detections), 1)
         self.assertEqual(detections[0]['type'], 'retry_loop')
         self.assertEqual(detections[0]['retry_count'], 4)
-        self.assertEqual(detections[0]['detection_method'], 'semantic')
+        self.assertEqual(detections[0]['detection_method'], 'exact_match')
 
 
-class TestOverkillModelDetector(unittest.TestCase):
-    """Test GPT-4 short prompt detection"""
+class TestExpensiveModelShortDetector(unittest.TestCase):
+    """Test GPT-4 short prompt detection (expensive_model_short only)"""
     
     def setUp(self):
-        self.detector = OverkillModelDetector()
+        from crashlens.detectors.overkill_model_detector import detect_expensive_model_waste
+        self.detector = detect_expensive_model_waste
     
-    def test_detect_overkill_model(self):
-        """Test detection of short GPT-4 prompts"""
+    def test_detect_expensive_model_short(self):
+        """Test detection of short GPT-4 prompts as expensive_model_short"""
         traces = {
             "trace_001": [
                 {
@@ -82,10 +82,9 @@ class TestOverkillModelDetector(unittest.TestCase):
             ]
         }
         
-        detections = self.detector.detect(traces)
-        
+        detections = self.detector(traces)
         self.assertEqual(len(detections), 1)
-        self.assertEqual(detections[0]['type'], 'expensive_model_overkill')
+        self.assertEqual(detections[0]['type'], 'expensive_model_short')
         self.assertEqual(detections[0]['model_used'], 'gpt-4')
 
 
@@ -131,4 +130,4 @@ class TestFallbackStormDetector(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()

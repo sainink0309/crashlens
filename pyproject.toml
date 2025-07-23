@@ -1,26 +1,24 @@
-[project]
+[tool.poetry]
 name = "crashlens"
 version = "0.1.0"
 description = "CLI to detect GPT token waste from Langfuse logs"
-authors = [
-    {name = "Aditya Singh", email = "coding103856@gmail.com"}
-]
-license = {text = "MIT"}
+authors = ["Aditya Singh <coding103856@gmail.com>"]
+license = "MIT"
 readme = "README.md"
-requires-python = "^3.12"
-dependencies = [
-    "click >=8.2.1,<9.0.0",
-    "pyyaml >=6.0.2,<7.0.0",
-    "jinja2 >=3.1.6,<4.0.0",
-    "rich >=14.0.0,<15.0.0",
-    "orjson >=3.10.18,<4.0.0",
-    "pyperclip >=1.8.2,<2.0.0",
-    "sentence-transformers >=2.2.0,<3.0.0"
-]
+packages = [{include = "crashlens"}]
 
-[project.scripts]
+[tool.poetry.dependencies]
+python = "^3.12"
+click = "^8.2.1"
+pyyaml = "^6.0.2"
+jinja2 = "^3.1.6"
+rich = "^14.0.0"
+orjson = "^3.10.18"
+pyperclip = "^1.8.2"
+
+[tool.poetry.scripts]
 crashlens = "crashlens.cli:cli"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
