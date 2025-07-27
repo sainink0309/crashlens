@@ -1,33 +1,8 @@
-🚨 **CrashLens Token Waste Report**
-============================================================
-📅 **Analysis Date**: 2025-07-28 02:22:49
-🔍 **Traces Analyzed**: 1
-💰 **Total AI Spend**: $0.0004
-💸 **Total Potential Savings**: $0.0003
-📊 **Issues Found**: 1
-🎯 **Wasted Tokens**: 13
-
-
-📈 **Cost by Model**:
-  • gpt-4: $0.0004 (100.0%)
-
-🔍 **Issue Breakdown**:
-❓ **Overkill_Model** (1 issues)
-  💰 Waste Cost: $0.0003
-  🎯 Waste Tokens: 13
-  📝 Sample prompts: What is 2+2?...
-  🔗 Sample traces: test_01
-
-💡 **Recommendations**:
-  • Consider using cheaper models for simple tasks
-
-📊 **Monthly Projection**:
-  💰 Potential monthly savings: $0.01
-=======
+🔒 CrashLens runs 100% locally. No data leaves your system.
 
 # CrashLens Token Waste Report
 
-**Analysis Date:** 2025-07-25 17:03:57  
+**Analysis Date:** 2025-07-28 02:20:16  
 
 **Traces Analyzed:** 156  
 
@@ -37,8 +12,8 @@
 | Metric | Value |
 |--------|-------|
 | Total AI Spend | $1.18 |
-| Total Potential Savings | $0.8388 |
-| Wasted Tokens | 68 |
+| Total Potential Savings | $0.9157 |
+| Wasted Tokens | 22,147 |
 | Issues Found | 87 |
 | Traces Analyzed | 156 |
 
@@ -58,14 +33,17 @@
 | gpt-3.5-turbo | $0.02 | 2% |
 
 
-## Unknown (9 issues)
+## Retry Loop (2 issues)
 
 | Metric | Value |
 |--------|-------|
 | Total Waste Cost | $0.0001 |
-| Total Waste Tokens | 68 |
+| Total Waste Tokens | 128 |
 
-**Issue**: 9 traces flagged by Unknown
+**Trace IDs**:
+`trace_retry_loop_07, trace_retry_loop_10`
+
+**Issue**: 2 traces flagged by Retry Loop
 
 **Sample Prompts**:
 1. `What is the current time in Tokyo?`
@@ -77,7 +55,10 @@
 | Metric | Value |
 |--------|-------|
 | Total Waste Cost | $0.0669 |
-| Total Waste Tokens | 0 |
+| Total Waste Tokens | 1,877 |
+
+**Trace IDs**:
+`trace_fallback_failure_01, trace_fallback_failure_02, trace_fallback_failure_03, trace_fallback_failure_04, trace_fallback_failure_05`
 
 **Issue**: 5 traces flagged by Fallback Storm
 
@@ -87,14 +68,30 @@
 3. `Summarize the key arguments in the philosophical t...`
 
 
-## Unknown (73 issues)
+## Fallback Failure (7 issues)
+
+| Metric | Value |
+|--------|-------|
+| Total Waste Cost | $0.0770 |
+| Total Waste Tokens | 1,330 |
+
+**Trace IDs**:
+`trace_fallback_success_01, trace_fallback_success_02, trace_fallback_success_03, trace_fallback_success_04, trace_fallback_success_05, trace_fallback_success_06, trace_fallback_success_07`
+
+**Issue**: 7 traces flagged by Fallback Failure
+
+
+## Overkill Model (73 issues)
 
 | Metric | Value |
 |--------|-------|
 | Total Waste Cost | $0.7717 |
-| Total Waste Tokens | 0 |
+| Total Waste Tokens | 18,812 |
 
-**Issue**: 73 traces flagged by Unknown
+**Trace IDs**:
+`trace_overkill_01, trace_norm_02, trace_fallback_success_01, trace_overkill_02, trace_overkill_03, trace_norm_06, trace_overkill_04, trace_fallback_failure_01, trace_overkill_05, trace_norm_11, +58 more`
+
+**Issue**: 73 traces flagged by Overkill Model
 
 **Sample Prompts**:
 1. `What is 2+2?`
@@ -104,8 +101,4 @@
 
 ## Monthly Projection
 
-Based on current patterns, potential monthly savings: **$25.16**
-
-**No token waste patterns detected! Your GPT usage looks efficient.**
-
-
+Based on current patterns, potential monthly savings: **$27.47**
