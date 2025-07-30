@@ -1,0 +1,127 @@
+[
+  {
+    "trace_id": "trace_fallback_failure_01",
+    "total_cost_usd": 0.017574,
+    "detector_triggered": "fallback_storm",
+    "issue": {
+      "type": "fallback_storm",
+      "description": "Fallback storm: 2 models used in 3 calls",
+      "estimated_waste_cost": 0.017574,
+      "waste_tokens": 476,
+      "severity": "medium",
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "num_calls": 3
+    },
+    "metadata": {
+      "num_records": 3,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.5
+    }
+  },
+  {
+    "trace_id": "trace_fallback_failure_02",
+    "total_cost_usd": 0.008467,
+    "detector_triggered": "fallback_storm",
+    "issue": {
+      "type": "fallback_storm",
+      "description": "Fallback storm: 2 models used in 3 calls",
+      "estimated_waste_cost": 0.008467,
+      "waste_tokens": 246,
+      "severity": "medium",
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "num_calls": 3
+    },
+    "metadata": {
+      "num_records": 3,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.58
+    }
+  },
+  {
+    "trace_id": "trace_fallback_failure_03",
+    "total_cost_usd": 0.023048,
+    "detector_triggered": "fallback_storm",
+    "issue": {
+      "type": "fallback_storm",
+      "description": "Fallback storm: 2 models used in 3 calls",
+      "estimated_waste_cost": 0.023048,
+      "waste_tokens": 634,
+      "severity": "medium",
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "num_calls": 3
+    },
+    "metadata": {
+      "num_records": 3,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.55
+    }
+  },
+  {
+    "trace_id": "trace_fallback_failure_04",
+    "total_cost_usd": 0.006292,
+    "detector_triggered": "fallback_storm",
+    "issue": {
+      "type": "fallback_storm",
+      "description": "Fallback storm: 2 models used in 3 calls",
+      "estimated_waste_cost": 0.006292,
+      "waste_tokens": 182,
+      "severity": "medium",
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "num_calls": 3
+    },
+    "metadata": {
+      "num_records": 3,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.5
+    }
+  },
+  {
+    "trace_id": "trace_fallback_failure_05",
+    "total_cost_usd": 0.011558,
+    "detector_triggered": "fallback_storm",
+    "issue": {
+      "type": "fallback_storm",
+      "description": "Fallback storm: 2 models used in 3 calls",
+      "estimated_waste_cost": 0.011558,
+      "waste_tokens": 339,
+      "severity": "medium",
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "num_calls": 3
+    },
+    "metadata": {
+      "num_records": 3,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.5
+    }
+  }
+]

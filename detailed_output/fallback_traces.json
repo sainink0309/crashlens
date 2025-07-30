@@ -1,0 +1,142 @@
+[
+  {
+    "trace_id": "trace_fallback_success_01",
+    "total_cost_usd": 0.004829,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.00474,
+      "waste_tokens": 93,
+      "severity": "medium"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.22
+    }
+  },
+  {
+    "trace_id": "trace_fallback_success_02",
+    "total_cost_usd": 0.016341,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.01596,
+      "waste_tokens": 272,
+      "severity": "high"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.3
+    }
+  },
+  {
+    "trace_id": "trace_fallback_success_03",
+    "total_cost_usd": 0.007838,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.00768,
+      "waste_tokens": 136,
+      "severity": "medium"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.25
+    }
+  },
+  {
+    "trace_id": "trace_fallback_success_04",
+    "total_cost_usd": 0.015636,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.01533,
+      "waste_tokens": 261,
+      "severity": "high"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.3
+    }
+  },
+  {
+    "trace_id": "trace_fallback_success_05",
+    "total_cost_usd": 0.024786,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.02433,
+      "waste_tokens": 411,
+      "severity": "high"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.33
+    }
+  },
+  {
+    "trace_id": "trace_fallback_success_06",
+    "total_cost_usd": 0.001527,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.0015,
+      "waste_tokens": 30,
+      "severity": "medium"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.25
+    }
+  },
+  {
+    "trace_id": "trace_fallback_success_07",
+    "total_cost_usd": 0.007563,
+    "detector_triggered": "fallback_failure",
+    "issue": {
+      "type": "fallback_failure",
+      "description": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_waste_cost": 0.00741,
+      "waste_tokens": 127,
+      "severity": "medium"
+    },
+    "metadata": {
+      "num_records": 2,
+      "models_used": [
+        "gpt-3.5-turbo",
+        "gpt-4"
+      ],
+      "time_span_minutes": 0.33
+    }
+  }
+]
