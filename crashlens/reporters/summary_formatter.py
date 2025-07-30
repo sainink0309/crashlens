@@ -154,7 +154,7 @@ class SummaryFormatter:
         trace_costs = {}
         
         for trace_id, records in traces.items():
-            trace_cost = sum(record.get('cost', 0.0) for record in records)
+            trace_cost = sum((record.get('cost') or 0.0) for record in records)
             if trace_cost > 0:
                 trace_costs[trace_id] = trace_cost
         

@@ -331,16 +331,14 @@ def generate_detailed_reports(
     traces: Dict[str, List[Dict[str, Any]]], 
     detections: List[Dict[str, Any]], 
     output_dir: Path, 
-    include_empty: bool,
     model_pricing: Dict[str, Any]
 ) -> int:
-    """Generate detailed per-trace JSON reports
+    """Generate detailed grouped JSON reports by detector category
     
     Args:
         traces: Dictionary of trace_id -> list of records
         detections: List of all detection results
         output_dir: Directory to save detailed reports
-        include_empty: Whether to include traces with no findings
         model_pricing: Model pricing configuration
         
     Returns:
@@ -352,12 +350,11 @@ def generate_detailed_reports(
     # Create output directory
     output_dir.mkdir(exist_ok=True)
     
-    # Group detections by trace_id
-    detections_by_trace = defaultdict(list)
+    # Group detections by detector type
+    detections_by_type = defaultdict(list)
     for detection in detections:
-        trace_id = detection.get('trace_id')
-        if trace_id:
-            detections_by_trace[trace_id].append(detection)
+        detector_type = detection.get('type', 'unknown')
+        detections_by_type[detector_type].append(detection)
     
     # Generate detector display names mapping
     detector_display_names = {
@@ -393,53 +390,25 @@ def generate_detailed_reports(
     
     reports_generated = 0
     
-    # Process each trace
-    for trace_id, records in traces.items():
-        trace_detections = detections_by_trace.get(trace_id, [])
-        
-        # Skip empty traces unless explicitly requested
-        if not trace_detections and not include_empty:
+    # Process each detector type
+    for detector_type, type_detections in detections_by_type.items():
+        if not type_detections:
             continue
         
-        # Validate trace_id
-        if not trace_id or trace_id.strip() == '':
-            click.echo(f"⚠️  Warning: Skipping trace with missing/empty trace_id", err=True)
-            continue
+        detector_name = detector_display_names.get(detector_type, detector_type.title())
         
-        # Calculate total cost for this trace
-        total_cost = 0.0
-        for record in records:
-            if 'cost' in record and record['cost'] is not None:
-                total_cost += record['cost']
-            elif model_pricing:
-                # Calculate from pricing
-                model = record.get('model', record.get('input', {}).get('model', 'unknown'))
-                usage = record.get('usage', {})
-                prompt_tokens = usage.get('prompt_tokens', 0) or record.get('prompt_tokens', 0)
-                completion_tokens = usage.get('completion_tokens', 0) or record.get('completion_tokens', 0)
-                
-                model_config = model_pricing.get(model, {})
-                if model_config:
-                    input_cost = (prompt_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
-                    output_cost = (completion_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
-                    total_cost += input_cost + output_cost
-        
-        # Extract detectors triggered
-        detectors_triggered = list(set(
-            detector_display_names.get(d.get('type', ''), d.get('type', 'Unknown'))
-            for d in trace_detections
-        ))
-        
-        # Format issues
+        # Format issues for this detector type
         issues = []
-        suggestions = set()
+        total_waste_cost = 0.0
+        total_waste_tokens = 0
+        affected_traces = set()
         
-        for detection in trace_detections:
-            detector_type = detection.get('type', 'unknown')
-            detector_name = detector_display_names.get(detector_type, detector_type.title())
+        for detection in type_detections:
+            trace_id = detection.get('trace_id', '')
+            affected_traces.add(trace_id)
             
             issue = {
-                'detector': detector_name,
+                'trace_id': trace_id,
                 'problem': detection.get('description', 'Unknown issue'),
                 'estimated_cost': round(detection.get('waste_cost', 0), 6),
                 'waste_tokens': detection.get('waste_tokens', 0),
@@ -449,52 +418,57 @@ def generate_detailed_reports(
             # Add detector-specific details
             if detector_type == 'retry_loop':
                 issue['retry_count'] = detection.get('retry_count', 0)
+                issue['models_involved'] = detection.get('models_used', [])
             elif detector_type == 'fallback_storm':
                 issue['models_used'] = detection.get('models_used', [])
                 issue['num_calls'] = detection.get('num_calls', 0)
+            elif detector_type == 'fallback_failure':
+                issue['expensive_model'] = detection.get('model_used', '')
+                issue['cheaper_model'] = detection.get('suggested_model', '')
             elif detector_type == 'overkill_model':
                 issue['expensive_model'] = detection.get('model_used', '')
                 issue['suggested_model'] = detection.get('suggested_model', '')
+                issue['prompt_preview'] = detection.get('sample_prompt', '')[:100] + '...' if detection.get('sample_prompt') else ''
             
             issues.append(issue)
-            
-            # Add suggestions for this detector type
-            detector_suggestions_list = detector_suggestions.get(detector_type, [])
-            suggestions.update(detector_suggestions_list)
+            total_waste_cost += detection.get('waste_cost', 0)
+            total_waste_tokens += detection.get('waste_tokens', 0)
         
-        # Create detailed report
+        # Calculate additional metadata
+        models_involved = set()
+        for trace_id in affected_traces:
+            if trace_id in traces:
+                for record in traces[trace_id]:
+                    model = record.get('model', record.get('input', {}).get('model', 'unknown'))
+                    models_involved.add(model)
+        
+        # Create grouped report
         report = {
-            'trace_id': trace_id,
-            'total_cost_usd': round(total_cost, 6),
-            'detectors_triggered': detectors_triggered,
+            'detector_type': detector_name,
+            'summary': {
+                'total_issues': len(issues),
+                'affected_traces': len(affected_traces),
+                'total_waste_cost': round(total_waste_cost, 6),
+                'total_waste_tokens': total_waste_tokens,
+                'models_involved': sorted(list(models_involved))
+            },
             'issues': issues,
-            'suggestions': sorted(list(suggestions)),
+            'suggestions': detector_suggestions.get(detector_type, []),
             'metadata': {
-                'num_records': len(records),
-                'models_used': list(set(
-                    record.get('model', record.get('input', {}).get('model', 'unknown'))
-                    for record in records
-                )),
-                'time_span_minutes': _calculate_trace_time_span(records),
-                'total_waste_cost': round(sum(d.get('waste_cost', 0) for d in trace_detections), 6),
-                'total_waste_tokens': sum(d.get('waste_tokens', 0) for d in trace_detections)
+                'generated_at': datetime.now().isoformat(),
+                'detector_category': detector_type
             }
         }
         
         # Write report to file
-        # Sanitize trace_id for filename
-        safe_trace_id = "".join(c for c in trace_id if c.isalnum() or c in ('-', '_', '.')).rstrip()
-        if not safe_trace_id:
-            safe_trace_id = f"trace_{reports_generated}"
-            
-        output_file = output_dir / f"{safe_trace_id}.json"
+        output_file = output_dir / f"{detector_type}.json"
         
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(report, f, indent=2)
             reports_generated += 1
         except Exception as e:
-            click.echo(f"⚠️  Warning: Failed to write report for trace {trace_id}: {e}", err=True)
+            click.echo(f"⚠️  Warning: Failed to write {detector_type} report: {e}", err=True)
     
     return reports_generated
 
@@ -522,71 +496,6 @@ def _calculate_trace_time_span(records: List[Dict[str, Any]]) -> float:
         return 0.0
 
 
-def write_grouped_detailed_reports(detections: List[Dict[str, Any]], output_dir: Path) -> Dict[str, int]:
-    """Write grouped detailed reports by category
-    
-    Args:
-        detections: List of detection dicts with keys: trace_id, category, details
-        output_dir: Directory to save the grouped JSON files
-        
-    Returns:
-        Dictionary mapping category names to number of traces written
-        
-    Example:
-        detections = [
-            {"trace_id": "abc", "category": "fallback", "details": {...}},
-            {"trace_id": "def", "category": "retry", "details": {...}},
-            {"trace_id": "ghi", "category": "fallback", "details": {...}}
-        ]
-        
-        Results in files:
-        - detailed_output/fallback_traces.json (2 traces)
-        - detailed_output/retry_traces.json (1 trace)
-    """
-    import json
-    from collections import defaultdict
-    
-    # Ensure output directory exists
-    output_dir.mkdir(exist_ok=True)
-    
-    # Group detections by category
-    grouped_detections = defaultdict(list)
-    
-    for detection in detections:
-        category = detection.get('category', 'unknown')
-        trace_id = detection.get('trace_id', 'unknown')
-        details = detection.get('details', {})
-        
-        # Add the full details to the category group
-        grouped_detections[category].append(details)
-    
-    # Write each category to its own file
-    files_written = {}
-    
-    for category, category_detections in grouped_detections.items():
-        if not category_detections:
-            continue
-            
-        # Sanitize category name for filename
-        safe_category = "".join(c for c in category if c.isalnum() or c in ('-', '_')).lower()
-        if not safe_category:
-            safe_category = "unknown"
-            
-        output_file = output_dir / f"{safe_category}_traces.json"
-        
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(category_detections, f, indent=2)
-            
-            files_written[category] = len(category_detections)
-            click.echo(f"✅ Wrote {len(category_detections)} traces to {output_file}")
-            
-        except Exception as e:
-            click.echo(f"⚠️  Warning: Failed to write {category} traces: {e}", err=True)
-    
-    return files_written
-
-
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
@@ -606,14 +515,12 @@ def cli():
 @click.option('--paste', is_flag=True, help='Read JSONL data from clipboard')
 @click.option('--summary', is_flag=True, help='Show cost summary with breakdown')
 @click.option('--summary-only', is_flag=True, help='Summary without trace IDs')
-@click.option('--detailed', is_flag=True, help='Generate grouped category reports (fallback, retry, overkill, etc.)')
+@click.option('--detailed', is_flag=True, help='Generate detailed per-trace JSON reports')
 @click.option('--detailed-dir', type=click.Path(path_type=Path), default='detailed_output', 
               help='Directory for detailed reports (default: detailed_output)')
-@click.option('--include-empty', is_flag=True, help='Include traces with no findings in detailed reports')
 def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: Optional[Path] = None, 
          demo: bool = False, stdin: bool = False, paste: bool = False, summary: bool = False, 
-         summary_only: bool = False, detailed: bool = False, detailed_dir: Path = Path('detailed_output'),
-         include_empty: bool = False) -> str:
+         summary_only: bool = False, detailed: bool = False, detailed_dir: Path = Path('detailed_output')) -> str:
     """🎯 Scan logs for token waste patterns with production-grade suppression logic
 
     📦 Examples:
@@ -621,9 +528,12 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
   crashlens scan logs.jsonl                    # Scan a specific log file
   crashlens scan --demo                        # Run on built-in sample logs
   cat logs.jsonl | crashlens scan --stdin      # Pipe logs via stdin
-        crashlens scan --paste                     # Read from clipboard
-        crashlens scan --detailed                  # Generate grouped category reports
-        crashlens scan --summary                   # Show cost summary breakdown    """
+  crashlens scan --paste                                 # Read logs from clipboard
+  crashlens scan --detailed                    # Generate traces JSON reports
+  crashlens scan --summary                     # Cost summary with categories
+  crashlens scan --summary-only                # Show summary only 
+
+    """
     
     # Validate input options
     input_count = sum([bool(logfile), demo, stdin, paste])
@@ -844,92 +754,12 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
     # Get suppression summary
     suppression_summary = suppression_engine.get_suppression_summary()
     
-    # Generate grouped category reports if requested
+    # Generate detailed per-trace reports if requested
     if detailed:
-        # Create detection data for grouping
-        grouped_detections = []
-        
-        # Map detector types to categories
-        detector_type_to_category = {
-            'retry_loop': 'retry',
-            'fallback_storm': 'fallback_storm', 
-            'fallback_failure': 'fallback',
-            'overkill_model': 'overkill'
-        }
-        
-        # Process each detection and create grouped data
-        for detection in all_active_detections:
-            trace_id = detection.get('trace_id', 'unknown')
-            detector_type = detection.get('type', 'unknown')
-            category = detector_type_to_category.get(detector_type, detector_type)
-            
-            # Get trace records for this detection
-            trace_records = traces.get(trace_id, [])
-            
-            # Calculate cost for this trace
-            total_cost = 0.0
-            for record in trace_records:
-                if 'cost' in record and record['cost'] is not None:
-                    total_cost += record['cost']
-                elif pricing_config.get('models', {}):
-                    model = record.get('model', record.get('input', {}).get('model', 'unknown'))
-                    usage = record.get('usage', {})
-                    prompt_tokens = usage.get('prompt_tokens', 0) or record.get('prompt_tokens', 0)
-                    completion_tokens = usage.get('completion_tokens', 0) or record.get('completion_tokens', 0)
-                    
-                    model_config = pricing_config.get('models', {}).get(model, {})
-                    if model_config:
-                        input_cost = (prompt_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
-                        output_cost = (completion_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
-                        total_cost += input_cost + output_cost
-            
-            # Create detailed trace report
-            trace_details = {
-                'trace_id': trace_id,
-                'total_cost_usd': round(total_cost, 6),
-                'detector_triggered': detector_type,
-                'issue': {
-                    'type': detector_type,
-                    'description': detection.get('description', 'Unknown issue'),
-                    'estimated_waste_cost': round(detection.get('waste_cost', 0), 6),
-                    'waste_tokens': detection.get('waste_tokens', 0),
-                    'severity': detection.get('severity', 'medium')
-                },
-                'metadata': {
-                    'num_records': len(trace_records),
-                    'models_used': list(set(
-                        record.get('model', record.get('input', {}).get('model', 'unknown'))
-                        for record in trace_records
-                    )),
-                    'time_span_minutes': _calculate_trace_time_span(trace_records)
-                }
-            }
-            
-            # Add detector-specific details
-            if detector_type == 'retry_loop':
-                trace_details['issue']['retry_count'] = detection.get('retry_count', 0)
-            elif detector_type == 'fallback_storm':
-                trace_details['issue']['models_used'] = detection.get('models_used', [])
-                trace_details['issue']['num_calls'] = detection.get('num_calls', 0)
-            elif detector_type == 'overkill_model':
-                trace_details['issue']['expensive_model'] = detection.get('model_used', '')
-                trace_details['issue']['suggested_model'] = detection.get('suggested_model', '')
-            
-            grouped_detections.append({
-                'trace_id': trace_id,
-                'category': category,
-                'details': trace_details
-            })
-        
-        # Write grouped reports
-        files_written = write_grouped_detailed_reports(grouped_detections, detailed_dir)
-        
-        if files_written:
-            click.echo(f"✅ Generated grouped category reports:")
-            for category, count in files_written.items():
-                click.echo(f"   • {category}_traces.json: {count} traces")
-        else:
-            click.echo("ℹ️  No grouped reports generated (no detections found)")
+        detailed_count = generate_detailed_reports(
+            traces, all_active_detections, detailed_dir, pricing_config.get('models', {})
+        )
+        click.echo(f"✅ Generated {detailed_count} detailed category reports in {detailed_dir}/")
     
     # Generate report based on format and write to report.md
     report_path = Path.cwd() / "report.md"

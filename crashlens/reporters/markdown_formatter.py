@@ -276,7 +276,7 @@ class MarkdownFormatter:
         for trace_id, records in traces.items():
             trace_cost = 0.0
             for record in records:
-                cost = record.get('cost', 0.0)
+                cost = record.get('cost') or 0.0
                 model = record.get('input', {}).get('model', record.get('model', 'unknown'))
                 
                 trace_cost += cost

@@ -140,7 +140,7 @@ class SlackFormatter:
         trace_costs = {}
         
         for trace_id, records in traces.items():
-            trace_cost = sum(record.get('cost', 0.0) for record in records)
+            trace_cost = sum((record.get('cost') or 0.0) for record in records)
             if trace_cost > 0:
                 trace_costs[trace_id] = trace_cost
         
@@ -171,7 +171,7 @@ class SlackFormatter:
         
         for records in traces.values():
             for record in records:
-                cost = record.get('cost', 0.0)
+                cost = record.get('cost') or 0.0
                 model = record.get('input', {}).get('model', record.get('model', 'unknown'))
                 model_costs[model] += cost
         
