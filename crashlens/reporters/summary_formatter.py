@@ -3,7 +3,7 @@ Summary Formatter
 Aggregates total costs by route, model, and team from traces
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from ..utils.pii_scrubber import PIIScrubber
 from collections import defaultdict
@@ -15,7 +15,7 @@ class SummaryFormatter:
     def __init__(self):
         self.pii_scrubber = PIIScrubber()
     
-    def format(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Dict[str, Any], summary_only: bool = False, detections: List[Dict[str, Any]] = None) -> str:
+    def format(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Dict[str, Any], summary_only: bool = False, detections: Optional[List[Dict[str, Any]]] = None) -> str:
         """Format cost summary from traces using compact FinOps format with waste analysis"""
         if not traces:
             return "🔒 CrashLens runs 100% locally. No data leaves your system.\nℹ️  No traces found for summary"
@@ -63,16 +63,19 @@ class SummaryFormatter:
             output.append(f"📊 CrashLens Summary – {timestamp} | Traces: {len(traces)} | Cost: {cost_str}")
         output.append("")
         
-        # Model breakdown - compact format
+        # Model breakdown - table format
         if model_costs:
+            output.append("🤖 **Model Breakdown**")
+            output.append("")
+            output.append("| Model | Cost | Percentage |")
+            output.append("|-------|------|------------|")
+            
             sorted_models = sorted(model_costs.items(), key=lambda x: x[1], reverse=True)
-            model_parts = []
             for model, cost in sorted_models:
                 cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                 percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-                model_parts.append(f"{model}: {cost_str} ({percentage:.0f}%)")
-            
-            output.append(f"🤖 Model Breakdown: {' | '.join(model_parts)}")
+                output.append(f"| {model} | {cost_str} | {percentage:.0f}% |")
+            output.append("")
         
         # Top expensive traces
         self._add_top_traces_summary(output, traces, summary_only)
@@ -83,7 +86,7 @@ class SummaryFormatter:
         
         return "\n".join(output)
 
-    def _format_summary_only(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Dict[str, Any], detections: List[Dict[str, Any]] = None) -> str:
+    def _format_summary_only(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Dict[str, Any], detections: Optional[List[Dict[str, Any]]] = None) -> str:
         """Create ultra-concise 2-3 line summary-only report"""
         # Calculate totals
         total_cost = 0.0
@@ -112,7 +115,7 @@ class SummaryFormatter:
         output.append(f"📊 {len(traces)} traces | {cost_str} total | {waste_str} waste")
         
         # Line 2: Issues breakdown (only if there are issues)
-        if total_issues > 0:
+        if total_issues > 0 and detections:
             # Group by type for concise display
             issue_types = {}
             for detection in detections:
@@ -147,7 +150,7 @@ class SummaryFormatter:
         return "\n".join(output)
 
     def _add_top_traces_summary(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool):
-        """Add compact top traces section"""
+        """Add compact top traces section in table format"""
         trace_costs = {}
         
         for trace_id, records in traces.items():
@@ -159,21 +162,28 @@ class SummaryFormatter:
             # Show fewer traces for summary-only mode
             max_traces = 3 if summary_only else 5
             sorted_traces = sorted(trace_costs.items(), key=lambda x: x[1], reverse=True)[:max_traces]
-            trace_lines = []
             
-            for i, (trace_id, cost) in enumerate(sorted_traces, 1):
-                cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
-                if summary_only:
-                    # Summary-only: just costs, no trace IDs or models
-                    trace_lines.append(f"#{i}: {cost_str}")
-                else:
-                    # Summary: show models but hide trace IDs
+            output.append("🏆 **Top Expensive Traces**")
+            output.append("")
+            
+            if summary_only:
+                # Summary-only: just rank and cost, no trace IDs or models
+                output.append("| Rank | Cost |")
+                output.append("|------|------|")
+                for i, (trace_id, cost) in enumerate(sorted_traces, 1):
+                    cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
+                    output.append(f"| #{i} | {cost_str} |")
+            else:
+                # Summary: show models but hide trace IDs
+                output.append("| Rank | Model | Cost |")
+                output.append("|------|-------|------|")
+                for i, (trace_id, cost) in enumerate(sorted_traces, 1):
+                    cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                     first_record = traces[trace_id][0] if traces[trace_id] else {}
                     model = first_record.get('input', {}).get('model', first_record.get('model', 'unknown'))
-                    trace_lines.append(f"#{i}: {model} → {cost_str}")
+                    output.append(f"| #{i} | {model} | {cost_str} |")
             
             output.append("")
-            output.append(f"🏆 Top {len(trace_lines)} Traces: " + " | ".join(trace_lines))
     
     def _calculate_record_cost(self, record: Dict[str, Any], model_pricing: Dict[str, Any]) -> float:
         """Calculate cost for a single record"""
@@ -194,8 +204,8 @@ class SummaryFormatter:
         
         return 0.0
 
-    def _add_waste_analysis_summary(self, output: List[str], detections: List[Dict[str, Any]], summary_only: bool):
-        """Add concise waste analysis to summary"""
+    def _add_waste_analysis_summary(self, output: List[str], detections: Optional[List[Dict[str, Any]]], summary_only: bool):
+        """Add concise waste analysis to summary in tabular format"""
         if not detections:
             return
         
@@ -214,10 +224,6 @@ class SummaryFormatter:
             waste_by_type[detector_type]['total_cost'] += detection.get('waste_cost', 0)
             waste_by_type[detector_type]['total_tokens'] += detection.get('waste_tokens', 0)
         
-        # Add waste summary
-        output.append("")
-        output.append("🚨 Waste Analysis:")
-        
         # Map detector types to display names
         display_names = {
             'retry_loop': '🔄 Retry Loops',
@@ -230,18 +236,34 @@ class SummaryFormatter:
         total_waste_tokens = sum(d.get('waste_tokens', 0) for d in detections)
         
         if total_waste_cost > 0:
-            output.append(f"   💰 Total Waste: ${total_waste_cost:.4f}")
-            output.append(f"   🎯 Wasted Tokens: {total_waste_tokens:,}")
+            output.append("")
+            output.append("🚨 **Waste Analysis**")
             output.append("")
             
-            # Show breakdown by type
+            # Create table header
+            if summary_only:
+                output.append("| Issue Type | Count | Cost |")
+                output.append("|------------|-------|------|")
+            else:
+                output.append("| Issue Type | Count | Cost | Tokens |")
+                output.append("|------------|-------|------|--------|")
+            
+            # Add table rows for each waste type
             for detector_type, data in waste_by_type.items():
                 if data['total_cost'] > 0:
                     display_name = display_names.get(detector_type, detector_type.title())
                     cost_str = f"${data['total_cost']:.4f}"
                     if summary_only:
-                        output.append(f"   {display_name}: {data['count']} issues, {cost_str}")
+                        output.append(f"| {display_name} | {data['count']} | {cost_str} |")
                     else:
-                        output.append(f"   {display_name}: {data['count']} issues, {cost_str}, {data['total_tokens']:,} tokens")
+                        output.append(f"| {display_name} | {data['count']} | {cost_str} | {data['total_tokens']:,} |")
+            
+            # Add total row
+            total_cost_str = f"${total_waste_cost:.4f}"
+            if summary_only:
+                output.append(f"| **Total** | **{len(detections)}** | **{total_cost_str}** |")
+            else:
+                output.append(f"| **Total** | **{len(detections)}** | **{total_cost_str}** | **{total_waste_tokens:,}** |")
         else:
-            output.append("   ✅ No waste patterns detected") 
+            output.append("")
+            output.append("✅ No waste patterns detected") 

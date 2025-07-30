@@ -61,17 +61,18 @@ class MarkdownFormatter:
         else:
             spend_str = f"${total_ai_spend:.4f}"
         
+        # Format savings amount appropriately
+        if total_waste_cost >= 0.01:
+            savings_str = f"${total_waste_cost:.2f}"
+        else:
+            savings_str = f"${total_waste_cost:.4f}"
+        
         output.append(f"| Total AI Spend | {spend_str} |")
-        output.append(f"| Total Potential Savings | ${total_waste_cost:.4f} |")
+        output.append(f"| Total Potential Savings | {savings_str} |")
         output.append(f"| Wasted Tokens | {total_waste_tokens:,} |")
         output.append(f"| Issues Found | {len(scrubbed_detections)} |")
         output.append(f"| Traces Analyzed | {len(traces)} |")
         output.append("")
-        
-        # Add cost breakdown sections (if we have real costs)
-        if total_ai_spend > 0:
-            self._add_cost_breakdown_tables(output, traces, summary_only)
-            output.append("")
         
         # Format aggregated detections
         for detector_name, group_data in aggregated.items():
@@ -98,13 +99,9 @@ class MarkdownFormatter:
             output.append(self._format_aggregated_detection(group_data, summary_only))
             output.append("")
         
-        # Monthly projection
-        if total_waste_cost > 0:
-            monthly_projection = total_waste_cost * 30  # Rough estimate
-            output.append("## Monthly Projection")
-            output.append("")
-            output.append(f"Based on current patterns, potential monthly savings: **${monthly_projection:.2f}**")
-            output.append("")
+        # Add cost breakdown sections (if we have real costs)
+        if total_ai_spend > 0:
+            self._add_cost_breakdown_tables(output, traces, summary_only)
         
         return "\n".join(output)
     

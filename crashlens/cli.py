@@ -324,11 +324,6 @@ def _format_human_readable(active_detections: List[Dict[str, Any]], total_waste_
     if detections_by_type.get('fallback_failure'):
         lines.append("  • Remove unnecessary fallbacks")
     
-    lines.append("")
-    lines.append("📊 **Monthly Projection**:")
-    monthly_savings = total_waste_cost * 30
-    lines.append(f"  💰 Potential monthly savings: ${monthly_savings:.2f}")
-    
     return "\n".join(lines)
 
 
@@ -398,18 +393,18 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
     try:
         if demo:
             # Use built-in demo data
-            demo_file = Path(__file__).parent.parent / "examples" / "demo-logs.jsonl"
+            demo_file = Path(__file__).parent.parent / "examples-logs" / "demo-logs.jsonl"
             if not demo_file.exists():
                 click.echo("❌ Error: Demo file not found. Please check installation.")
                 sys.exit(1)
             click.echo("🎬 Running analysis on built-in demo data...")
-            traces = parser.parse_file(demo_file)
+            traces = parser.parse_file(demo_file) or {}
         
         elif stdin:
             # Read from standard input
             click.echo("📥 Reading JSONL data from standard input...")
             try:
-                traces = parser.parse_stdin()
+                traces = parser.parse_stdin() or {}
             except KeyboardInterrupt:
                 click.echo("\n⚠️  Input cancelled by user")
                 sys.exit(1)
@@ -440,7 +435,7 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
                 
                 # Join lines and parse as string
                 jsonl_text = '\n'.join(lines)
-                traces = parser.parse_string(jsonl_text)
+                traces = parser.parse_string(jsonl_text) or {}
                 
             except ImportError:
                 click.echo("❌ Error: pyperclip library not available")
@@ -453,7 +448,7 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
         
         elif logfile:
             # Read from specified file
-            traces = parser.parse_file(logfile)
+            traces = parser.parse_file(logfile) or {}
         
     except Exception as e:
         click.echo(f"❌ Error reading input: {e}", err=True)

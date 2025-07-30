@@ -73,12 +73,41 @@ Now you can run `crashlens` from any folder.
 
 ---
 
+**CrashLens** analyzes your logs for patterns like fallback failures, retry loops, and overkill model usage, and generates a detailed Markdown report (`report.md`) with cost breakdowns and actionable insights.
+
 ## 📝 Example CrashLens Report
 
 Below is a sample of what the actual `report.md` looks like after running CrashLens:
 
+🚨 **CrashLens Token Waste Report** 🚨
+📊 Analysis Date: 2025-07-29 12:25:21
+🔍 Traces Analyzed: 156
+💰 Total AI Spend: $1.18
+💸 Potential Savings: $0.92
 
-**CrashLens** is a CLI tool for detecting token waste and inefficiencies in GPT API logs. It analyzes your logs for patterns like fallback failures, retry loops, and overkill model usage, and generates a detailed Markdown report (`report.md`) with cost breakdowns and actionable insights.
+❓ **Overkill Model** | 73 traces | $0.77 wasted | Fix: optimize usage
+   🎯 **Wasted tokens**: 18,812
+   🔗 **Traces** (68): trace_overkill_01, trace_norm_02, trace_fallback_success_01, trace_overkill_02, trace_overkill_03, +63 more
+   📄 **Samples**: "What is 2+2?...", "Draft a comprehensive business..."
+
+📢 **Fallback Failure** | 7 traces | $0.08 wasted | Fix: remove redundant fallbacks
+   🎯 **Wasted tokens**: 1,330
+   🔗 **Traces** (7): trace_fallback_success_01, trace_fallback_success_02, trace_fallback_success_03, trace_fallback_success_04, trace_fallback_success_05, +2 more
+
+⚡ **Fallback Storm** | 5 traces | $0.07 wasted | Fix: optimize model selection
+   🎯 **Wasted tokens**: 1,877
+   🔗 **Traces** (5): trace_fallback_failure_01, trace_fallback_failure_02, trace_fallback_failure_03, trace_fallback_failure_04, trace_fallback_failure_05
+   📄 **Samples**: "Write a Python script to analy...", "Create a function in Go to rev..."
+
+🔄 **Retry Loop** | 2 traces | $0.0001 wasted | Fix: exponential backoff
+   🎯 **Wasted tokens**: 128
+   🔗 **Traces** (2): trace_retry_loop_07, trace_retry_loop_10
+   📄 **Samples**: "What is the current time in To...", "What is the capital of India?..."
+
+
+💡 Top 3 Expensive Traces: 1. trace_norm_76 → gpt-4 → $0.09 | 2. trace_norm_65 → gpt-4 → $0.07 | 3. trace_norm_38 → gpt-4 → $0.06
+📊 **Model Breakdown**: gpt-4: $1.16 (98%) | gpt-3.5-turbo: $0.02 (2%)
+
 
 ---
 
@@ -112,21 +141,49 @@ CrashLens requires **Python 3.8+** and [Poetry](https://python-poetry.org/) for 
   ```sh
   brew install python@3.12
   ```
-- Install Poetry:
+- Install Poetry (stable version):
   ```sh
-  curl -sSL https://install.python-poetry.org | python3 -
+  curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
   # Or with Homebrew:
   brew install poetry
   ```
+- Add Poetry to your PATH if needed:
+  ```sh
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
+  source ~/.zprofile
+  ```
+- Verify installation:
+  ```sh
+  poetry --version
+  # Should show: Poetry (version 1.8.2)
+  ```
 
 ### Windows
+⚠️ **Use PowerShell, not CMD, for these commands.**
+
 - Install Python from [python.org](https://www.python.org/downloads/)
-- Install Poetry:
-  ```sh
-  (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing | python -)
-  # Or download and run the installer from the Poetry website
+- Install Poetry (stable version):
+  ```powershell
+  (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python - --version 1.8.2
   ```
-- Add Python and Poetry to your PATH if needed.
+- Add Poetry to your PATH if `poetry --version` returns "not found":
+  ```powershell
+  $userPoetryBin = "$HOME\AppData\Roaming\Python\Scripts"
+  
+  if (Test-Path $userPoetryBin -and -not ($env:Path -like "*$userPoetryBin*")) {
+      $env:Path += ";$userPoetryBin"
+      [Environment]::SetEnvironmentVariable("Path", $env:Path, "User")
+      Write-Output "✅ Poetry path added. Restart your terminal."
+  } else {
+      Write-Output "⚠️ Poetry path not found or already added. You may need to locate poetry.exe manually."
+  }
+  ```
+  **⚠️ Restart your terminal/PowerShell after adding to PATH.**
+- Verify installation:
+  ```powershell
+  poetry --version
+  # Should show: Poetry (version 1.8.2)
+  ```
 
 ---
 
@@ -139,15 +196,8 @@ poetry install
 
 This will create a virtual environment and install all dependencies.
 
-To activate the environment (optional, for direct python usage):
-- **Mac/Linux:**
+To activate the environment :
   ```sh
-  source $(poetry env info --path)/bin/activate
-  ```
-- **Windows:**
-  ```sh
-  .venv\Scripts\activate
-  # Or
   poetry shell
   ```
 
@@ -159,14 +209,14 @@ You can run CrashLens via Poetry or as a Python module:
 
 ### Basic Scan (from file)
 ```sh
-poetry run crashlens scan examples/retry-test.jsonl
+crashlens scan examples/retry-test.jsonl
 # Or
-python -m crashlens scan examples/retry-test.jsonl
+crashlens scan examples/retry-test.jsonl
 ```
 
 ### Demo Mode (built-in sample data)
 ```sh
-poetry run crashlens scan --demo
+crashlens scan --demo
 
 ```
 🔒 CrashLens runs 100% locally. No data leaves your system.

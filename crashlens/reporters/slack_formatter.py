@@ -62,12 +62,20 @@ class SlackFormatter:
             output.append("📝 Summary-only mode: Prompts, sample inputs, and trace IDs are suppressed for safe internal sharing.")
             output.append("")
         
-        # Enhanced header with more emojis
+        # Enhanced header with summary table
         output.append(f"🚨 **CrashLens Token Waste Report** 🚨")
         output.append(f"📊 Analysis Date: {timestamp}")
-        output.append(f"🔍 Traces Analyzed: {len(traces):,}")
-        output.append(f"💰 Total AI Spend: {spend_str}")
-        output.append(f"💸 Potential Savings: {savings_str}")
+        output.append("")
+        
+        # Summary table
+        total_waste_tokens = sum(d.get('waste_tokens', 0) for d in detections)
+        output.append("| Metric | Value |")
+        output.append("|--------|-------|")
+        output.append(f"| Total AI Spend | {spend_str} |")
+        output.append(f"| Total Potential Savings | {savings_str} |")
+        output.append(f"| Wasted Tokens | {total_waste_tokens:,} |")
+        output.append(f"| Issues Found | {len(detections)} |")
+        output.append(f"| Traces Analyzed | {len(traces)} |")
         output.append("")
         
         # Detector summaries - sorted by waste amount
@@ -128,7 +136,7 @@ class SlackFormatter:
         return "\n".join(output)
     
     def _add_top_traces(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool):
-        """Add top expensive traces section"""
+        """Add top expensive traces section with table format"""
         trace_costs = {}
         
         for trace_id, records in traces.items():
@@ -138,22 +146,25 @@ class SlackFormatter:
         
         if trace_costs:
             sorted_traces = sorted(trace_costs.items(), key=lambda x: x[1], reverse=True)[:self.max_traces_to_show]
-            trace_lines = []
+            
+            output.append("## Top Expensive Traces")
+            output.append("")
+            output.append("| Rank | Trace ID | Model | Cost |")
+            output.append("|------|----------|-------|------|")
             
             for i, (trace_id, cost) in enumerate(sorted_traces, 1):
                 cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                 if summary_only:
-                    trace_lines.append(f"{i}. trace_*** → {cost_str}")
+                    output.append(f"| {i} | trace_*** | *** | {cost_str} |")
                 else:
                     # Get model from first record
                     first_record = traces[trace_id][0] if traces[trace_id] else {}
                     model = first_record.get('input', {}).get('model', first_record.get('model', 'unknown'))
-                    trace_lines.append(f"{i}. {trace_id} → {model} → {cost_str}")
-            
-            output.append(f"💡 Top {len(trace_lines)} Expensive Traces: " + " | ".join(trace_lines))
+                    output.append(f"| {i} | {trace_id} | {model} | {cost_str} |")
+            output.append("")
     
     def _add_model_breakdown(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]]):
-        """Add compact model cost breakdown"""
+        """Add model cost breakdown with table format"""
         from collections import defaultdict
         
         model_costs = defaultdict(float)
@@ -168,13 +179,15 @@ class SlackFormatter:
             total_cost = sum(model_costs.values())
             sorted_models = sorted(model_costs.items(), key=lambda x: x[1], reverse=True)
             
-            model_parts = []
+            output.append("## Cost by Model")
+            output.append("")
+            output.append("| Model | Cost | Percentage |")
+            output.append("|-------|------|------------|")
+            
             for model, cost in sorted_models:
                 cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                 percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-                model_parts.append(f"{model}: {cost_str} ({percentage:.0f}%)")
-            
-            output.append(f"📊 **Model Breakdown**: {' | '.join(model_parts)}")
+                output.append(f"| {model} | {cost_str} | {percentage:.0f}% |")
             output.append("")
 
     def _aggregate_detections(self, detections: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
