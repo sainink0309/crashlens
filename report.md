@@ -1,31 +1,40 @@
-🔒 CrashLens runs 100% locally. No data leaves your system.
-📝 Summary mode: Trace IDs are suppressed for safe internal sharing.
-📊 CrashLens Summary – 2025-07-30 13:58:19 | Traces: 156 | Cost: $1.18 | Tokens: 33,823
+🚨 **CrashLens Token Waste Report** 🚨
+📊 Analysis Date: 2025-07-30 14:01:37
 
-🤖 **Model Breakdown**
+| Metric | Value |
+|--------|-------|
+| Total AI Spend | $0.09 |
+| Total Potential Savings | $0.09 |
+| Wasted Tokens | 2,549 |
+| Issues Found | 12 |
+| Traces Analyzed | 12 |
+
+📢 **Fallback Failure** | 5 traces | $0.07 wasted | Fix: remove redundant fallbacks
+   🎯 **Wasted tokens**: 1,275
+   🔗 **Traces** (5): demo_fallback_01, demo_fallback_02, demo_fallback_03, demo_fallback_04, demo_fallback_05
+
+❓ **Overkill Model** | 6 traces | $0.02 wasted | Fix: optimize usage
+   🎯 **Wasted tokens**: 1,166
+   🔗 **Traces** (6): demo_overkill_01, demo_overkill_02, demo_fallback_01, demo_fallback_03, demo_fallback_04, +1 more
+   📄 **Samples**: "What is 2+2?...", "What is the capital of France?..."
+
+🔄 **Retry Loop** | 1 traces | $0.0002 wasted | Fix: exponential backoff
+   🎯 **Wasted tokens**: 108
+   🔗 **Traces** (1): demo_retry_01
+   📄 **Samples**: "What is the weather like today..."
+
+
+## Top Expensive Traces
+
+| Rank | Trace ID | Model | Cost |
+|------|----------|-------|------|
+| 1 | demo_norm_03 | gpt-4 | $0.03 |
+| 2 | demo_norm_04 | gpt-4 | $0.02 |
+| 3 | demo_fallback_05 | gpt-3.5-turbo | $0.02 |
+
+## Cost by Model
 
 | Model | Cost | Percentage |
 |-------|------|------------|
-| gpt-4 | $1.16 | 98% |
-| gpt-3.5-turbo | $0.02 | 2% |
-
-🏆 **Top Expensive Traces**
-
-| Rank | Model | Cost |
-|------|-------|------|
-| #1 | gpt-4 | $0.09 |
-| #2 | gpt-4 | $0.07 |
-| #3 | gpt-4 | $0.06 |
-| #4 | gpt-4 | $0.05 |
-| #5 | gpt-4 | $0.05 |
-
-
-🚨 **Waste Analysis**
-
-| Issue Type | Count | Cost | Tokens |
-|------------|-------|------|--------|
-| 🔄 Retry Loops | 2 | $0.0001 | 128 |
-| ⚡ Fallback Storms | 5 | $0.0669 | 1,877 |
-| 📢 Fallback Failures | 7 | $0.0770 | 1,330 |
-| ❓ Overkill Models | 73 | $0.7717 | 18,812 |
-| **Total** | **87** | **$0.9157** | **22,147** |
+| gpt-4 | $0.09 | 99% |
+| gpt-3.5-turbo | $0.0012 | 1% |

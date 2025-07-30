@@ -2,7 +2,7 @@
 
 # CrashLens Token Waste Report
 
-**Analysis Date:** 2025-07-28 02:20:16  
+**Analysis Date:** 2025-07-30 13:59:50  
 
 **Traces Analyzed:** 156  
 
@@ -12,26 +12,10 @@
 | Metric | Value |
 |--------|-------|
 | Total AI Spend | $1.18 |
-| Total Potential Savings | $0.9157 |
+| Total Potential Savings | $0.92 |
 | Wasted Tokens | 22,147 |
 | Issues Found | 87 |
 | Traces Analyzed | 156 |
-
-## Top Expensive Traces
-
-| Rank | Trace ID | Model | Cost |
-|------|----------|-------|------|
-| 1 | trace_norm_76 | gpt-4 | $0.09 |
-| 2 | trace_norm_65 | gpt-4 | $0.07 |
-| 3 | trace_norm_38 | gpt-4 | $0.06 |
-
-## Cost by Model
-
-| Model | Cost | Percentage |
-|-------|------|------------|
-| gpt-4 | $1.16 | 98% |
-| gpt-3.5-turbo | $0.02 | 2% |
-
 
 ## Retry Loop (2 issues)
 
@@ -99,6 +83,17 @@
 3. `Generate a complex SQL query to find users who hav...`
 
 
-## Monthly Projection
+## Top Expensive Traces
 
-Based on current patterns, potential monthly savings: **$27.47**
+| Rank | Trace ID | Model | Cost |
+|------|----------|-------|------|
+| 1 | trace_norm_76 | gpt-4 | $0.09 |
+| 2 | trace_norm_65 | gpt-4 | $0.07 |
+| 3 | trace_norm_38 | gpt-4 | $0.06 |
+
+## Cost by Model
+
+| Model | Cost | Percentage |
+|-------|------|------------|
+| gpt-4 | $1.16 | 98% |
+| gpt-3.5-turbo | $0.02 | 2% |

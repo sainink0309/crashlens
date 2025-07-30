@@ -219,90 +219,49 @@ crashlens scan examples/retry-test.jsonl
 crashlens scan --demo
 
 ```
+🎬 Running analysis on built-in demo data...
 🔒 CrashLens runs 100% locally. No data leaves your system.
-
-
-# CrashLens Token Waste Report
-
-**Analysis Date:** 2025-07-25 17:03:57  
-
-**Traces Analyzed:** 156  
-
-
-## Summary
+✅ Slack report written to C:\Users\LawLight\OneDrive\Desktop\crashlens\report.md
+🚨 **CrashLens Token Waste Report** 🚨
+📊 Analysis Date: 2025-07-30 14:01:37
 
 | Metric | Value |
 |--------|-------|
-| Total AI Spend | $1.18 |
-| Total Potential Savings | $0.8388 |
-| Wasted Tokens | 68 |
-| Issues Found | 87 |
-| Traces Analyzed | 156 |
+| Total AI Spend | $0.09 |
+| Total Potential Savings | $0.09 |
+| Wasted Tokens | 2,549 |
+| Issues Found | 12 |
+| Traces Analyzed | 12 |
+
+📢 **Fallback Failure** | 5 traces | $0.07 wasted | Fix: remove redundant fallbacks
+   🎯 **Wasted tokens**: 1,275
+   🔗 **Traces** (5): demo_fallback_01, demo_fallback_02, demo_fallback_03, demo_fallback_04, demo_fallback_05
+
+❓ **Overkill Model** | 6 traces | $0.02 wasted | Fix: optimize usage
+   🎯 **Wasted tokens**: 1,166
+   🔗 **Traces** (6): demo_overkill_01, demo_overkill_02, demo_fallback_01, demo_fallback_03, demo_fallback_04, +1 more
+   📄 **Samples**: "What is 2+2?...", "What is the capital of France?..."
+
+🔄 **Retry Loop** | 1 traces | $0.0002 wasted | Fix: exponential backoff
+   🎯 **Wasted tokens**: 108
+   🔗 **Traces** (1): demo_retry_01
+   📄 **Samples**: "What is the weather like today..."
+
 
 ## Top Expensive Traces
 
 | Rank | Trace ID | Model | Cost |
 |------|----------|-------|------|
-| 1 | trace_norm_76 | gpt-4 | $0.09 |
-| 2 | trace_norm_65 | gpt-4 | $0.07 |
-| 3 | trace_norm_38 | gpt-4 | $0.06 |
+| 1 | demo_norm_03 | gpt-4 | $0.03 |
+| 2 | demo_norm_04 | gpt-4 | $0.02 |
+| 3 | demo_fallback_05 | gpt-3.5-turbo | $0.02 |
 
 ## Cost by Model
 
 | Model | Cost | Percentage |
 |-------|------|------------|
-| gpt-4 | $1.16 | 98% |
-| gpt-3.5-turbo | $0.02 | 2% |
-
-
-## Unknown (9 issues)
-
-| Metric | Value |
-|--------|-------|
-| Total Waste Cost | $0.0001 |
-| Total Waste Tokens | 68 |
-
-**Issue**: 9 traces flagged by Unknown
-
-**Sample Prompts**:
-1. `What is the current time in Tokyo?`
-2. `What is the capital of India?`
-
-
-## Fallback Storm (5 issues)
-
-| Metric | Value |
-|--------|-------|
-| Total Waste Cost | $0.0669 |
-| Total Waste Tokens | 0 |
-
-**Issue**: 5 traces flagged by Fallback Storm
-
-**Sample Prompts**:
-1. `Write a Python script to analyze sentiment from a ...`
-2. `Create a function in Go to reverse a string, make ...`
-3. `Summarize the key arguments in the philosophical t...`
-
-
-## Unknown (73 issues)
-
-| Metric | Value |
-|--------|-------|
-| Total Waste Cost | $0.7717 |
-| Total Waste Tokens | 0 |
-
-**Issue**: 73 traces flagged by Unknown
-
-**Sample Prompts**:
-1. `What is 2+2?`
-2. `Draft a comprehensive business plan for a new e-co...`
-3. `Generate a complex SQL query to find users who hav...`
-
-
-## Monthly Projection
-
-Based on current patterns, potential monthly savings: **$25.16**
-
+| gpt-4 | $0.09 | 99% |
+| gpt-3.5-turbo | $0.0012 | 1% |
 ```
 
 ---
