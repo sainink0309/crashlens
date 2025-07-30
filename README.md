@@ -210,8 +210,6 @@ You can run CrashLens via Poetry or as a Python module:
 ### Basic Scan (from file)
 ```sh
 crashlens scan examples/retry-test.jsonl
-# Or
-crashlens scan examples/retry-test.jsonl
 ```
 
 ### Demo Mode (built-in sample data)
@@ -343,9 +341,30 @@ cat path/to/your-logs.jsonl | crashlens scan --stdin
 ```sh
 crashlens scan --paste
 ```
-- Allows you to paste log lines directly into the terminal (end input with Ctrl+D).
+- Reads JSONL data from clipboard (paste and press Enter to finish).
 
-### 5. **Get help**
+### 5. **Generate detailed category reports**
+```sh
+crashlens scan --detailed
+```
+- Creates grouped JSON files in `detailed_output/` by issue type (fallback_failure.json, retry_loop.json, etc.).
+
+### 6. **Get cost summaries**
+```sh
+crashlens scan --summary          # Cost summary with breakdown
+crashlens scan --summary-only     # Summary without trace IDs
+```
+- Shows cost analysis with or without detailed trace information.
+
+### 7. **Change output format**
+```sh
+crashlens scan --format json      # JSON output
+crashlens scan --format markdown  # Markdown format  
+crashlens scan --format human     # Human-readable terminal output
+```
+- Default format is `slack` for team sharing.
+
+### 8. **Get help**
 ```sh
 crashlens --help
 crashlens scan --help
@@ -512,6 +531,86 @@ poetry run crashlens scan --demo
 # Scan from stdin
 cat examples/demo-logs.jsonl | poetry run crashlens scan --stdin
 ```
+
+---
+
+## 📚 Complete Command Reference
+
+### Basic Usage
+```sh
+crashlens scan [OPTIONS] [LOGFILE]
+```
+
+### 🎯 Examples
+```sh
+# Scan a specific log file
+crashlens scan logs.jsonl
+
+# Run on built-in sample logs
+crashlens scan --demo
+
+# Pipe logs via stdin
+cat logs.jsonl | crashlens scan --stdin
+
+# Read logs from clipboard
+crashlens scan --paste
+
+# Generate detailed category JSON reports
+crashlens scan --detailed
+
+# Cost summary with categories
+crashlens scan --summary
+
+# Show summary only (no trace details)
+crashlens scan --summary-only
+```
+
+### 🔧 All Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `-f, --format` | Output format: `slack`, `markdown`, `json`, `human` | `--format json` |
+| `-c, --config` | Custom pricing config file path | `--config my-pricing.yaml` |
+| `--demo` | Use built-in demo data | `crashlens scan --demo` |
+| `--stdin` | Read from standard input | `cat logs.jsonl \| crashlens scan --stdin` |
+| `--paste` | Read JSONL data from clipboard | `crashlens scan --paste` |
+| `--summary` | Show cost summary with breakdown | `crashlens scan --summary` |
+| `--summary-only` | Summary without trace IDs | `crashlens scan --summary-only` |
+| `--detailed` | Generate detailed category JSON reports | `crashlens scan --detailed` |
+| `--detailed-dir` | Directory for detailed reports (default: detailed_output) | `--detailed-dir my_reports` |
+| `--help` | Show help message | `crashlens scan --help` |
+
+### 📂 Detailed Reports
+When using `--detailed`, CrashLens generates grouped category files:
+- `detailed_output/fallback_failure.json` - All fallback failure issues
+- `detailed_output/retry_loop.json` - All retry loop issues  
+- `detailed_output/fallback_storm.json` - All fallback storm issues
+- `detailed_output/overkill_model.json` - All overkill model issues
+
+Each file contains:
+- Summary with total issues, affected traces, costs
+- All issues of that type with trace IDs and details
+- Specific suggestions for that category
+
+### 🔍 Input Sources
+CrashLens supports multiple input methods:
+
+1. **File input**: `crashlens scan path/to/logs.jsonl`
+2. **Demo mode**: `crashlens scan --demo` (uses built-in sample data)
+3. **Standard input**: `cat logs.jsonl | crashlens scan --stdin`
+4. **Clipboard**: `crashlens scan --paste` (paste logs interactively)
+
+### 📊 Output Formats
+- **slack** (default): Slack-formatted report for team sharing
+- **markdown**: Clean Markdown for documentation
+- **json**: Machine-readable JSON for automation
+- **human**: Human-friendly terminal output
+
+### 💡 Pro Tips
+- Use `--demo` to test CrashLens without your own logs
+- Use `--detailed` to get actionable JSON reports for each issue category
+- Use `--summary-only` for executive summaries without trace details
+- Combine `--stdin` with shell pipelines for automation
 
 ---
 
