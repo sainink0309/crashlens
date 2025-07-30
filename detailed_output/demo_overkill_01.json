@@ -1,0 +1,32 @@
+{
+  "trace_id": "demo_overkill_01",
+  "total_cost_usd": 0.00039,
+  "detectors_triggered": [
+    "Overkill Model Detector"
+  ],
+  "issues": [
+    {
+      "detector": "Overkill Model Detector",
+      "problem": "Overkill: gpt-4 used for simple task (prompt starts with 'what is')",
+      "estimated_cost": 0.000273,
+      "waste_tokens": 13,
+      "severity": "medium",
+      "expensive_model": "",
+      "suggested_model": "gpt-3.5-turbo"
+    }
+  ],
+  "suggestions": [
+    "Implement prompt length-based model selection",
+    "Route simple prompts to cheaper models (e.g., gpt-3.5-turbo)",
+    "Use GPT-4 only for complex reasoning tasks"
+  ],
+  "metadata": {
+    "num_records": 1,
+    "models_used": [
+      "gpt-4"
+    ],
+    "time_span_minutes": 0.0,
+    "total_waste_cost": 0.000273,
+    "total_waste_tokens": 13
+  }
+}

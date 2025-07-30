@@ -1,0 +1,31 @@
+{
+  "trace_id": "demo_fallback_02",
+  "total_cost_usd": 0.00424,
+  "detectors_triggered": [
+    "Fallback Failure Detector"
+  ],
+  "issues": [
+    {
+      "detector": "Fallback Failure Detector",
+      "problem": "Unnecessary fallback from gpt-3.5-turbo to gpt-4",
+      "estimated_cost": 0.0078,
+      "waste_tokens": 140,
+      "severity": "medium"
+    }
+  ],
+  "suggestions": [
+    "Only fallback when cheaper models actually fail",
+    "Remove redundant expensive fallback calls",
+    "Use cheaper models as primary option"
+  ],
+  "metadata": {
+    "num_records": 2,
+    "models_used": [
+      "gpt-3.5-turbo",
+      "gpt-4"
+    ],
+    "time_span_minutes": 0.03,
+    "total_waste_cost": 0.0078,
+    "total_waste_tokens": 140
+  }
+}

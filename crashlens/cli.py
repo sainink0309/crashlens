@@ -215,7 +215,7 @@ def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 
-def _format_human_readable(active_detections: List[Dict[str, Any]], total_waste_cost: float, traces: Dict[str, List[Dict[str, Any]]] = None, model_pricing: Dict[str, Any] = None) -> str:
+def _format_human_readable(active_detections: List[Dict[str, Any]], total_waste_cost: float, traces: Optional[Dict[str, List[Dict[str, Any]]]] = None, model_pricing: Optional[Dict[str, Any]] = None) -> str:
     """📊 Generate comprehensive human-centric output with detailed information"""
     
     # Calculate additional metrics
@@ -327,6 +327,201 @@ def _format_human_readable(active_detections: List[Dict[str, Any]], total_waste_
     return "\n".join(lines)
 
 
+def generate_detailed_reports(
+    traces: Dict[str, List[Dict[str, Any]]], 
+    detections: List[Dict[str, Any]], 
+    output_dir: Path, 
+    include_empty: bool,
+    model_pricing: Dict[str, Any]
+) -> int:
+    """Generate detailed per-trace JSON reports
+    
+    Args:
+        traces: Dictionary of trace_id -> list of records
+        detections: List of all detection results
+        output_dir: Directory to save detailed reports
+        include_empty: Whether to include traces with no findings
+        model_pricing: Model pricing configuration
+        
+    Returns:
+        Number of reports generated
+    """
+    import json
+    from collections import defaultdict
+    
+    # Create output directory
+    output_dir.mkdir(exist_ok=True)
+    
+    # Group detections by trace_id
+    detections_by_trace = defaultdict(list)
+    for detection in detections:
+        trace_id = detection.get('trace_id')
+        if trace_id:
+            detections_by_trace[trace_id].append(detection)
+    
+    # Generate detector display names mapping
+    detector_display_names = {
+        'retry_loop': 'Retry Loop Detector',
+        'fallback_storm': 'Fallback Storm Detector',
+        'fallback_failure': 'Fallback Failure Detector', 
+        'overkill_model': 'Overkill Model Detector'
+    }
+    
+    # Suggestion mappings
+    detector_suggestions = {
+        'retry_loop': [
+            "Implement exponential backoff for retries",
+            "Add circuit breakers to prevent retry storms",
+            "Set maximum retry limits (e.g., 3 retries max)"
+        ],
+        'fallback_storm': [
+            "Optimize model selection logic",
+            "Use deterministic routing instead of chaotic fallbacks", 
+            "Implement proper model prioritization"
+        ],
+        'fallback_failure': [
+            "Remove redundant expensive fallback calls",
+            "Use cheaper models as primary option",
+            "Only fallback when cheaper models actually fail"
+        ],
+        'overkill_model': [
+            "Route simple prompts to cheaper models (e.g., gpt-3.5-turbo)",
+            "Implement prompt length-based model selection",
+            "Use GPT-4 only for complex reasoning tasks"
+        ]
+    }
+    
+    reports_generated = 0
+    
+    # Process each trace
+    for trace_id, records in traces.items():
+        trace_detections = detections_by_trace.get(trace_id, [])
+        
+        # Skip empty traces unless explicitly requested
+        if not trace_detections and not include_empty:
+            continue
+        
+        # Validate trace_id
+        if not trace_id or trace_id.strip() == '':
+            click.echo(f"⚠️  Warning: Skipping trace with missing/empty trace_id", err=True)
+            continue
+        
+        # Calculate total cost for this trace
+        total_cost = 0.0
+        for record in records:
+            if 'cost' in record and record['cost'] is not None:
+                total_cost += record['cost']
+            elif model_pricing:
+                # Calculate from pricing
+                model = record.get('model', record.get('input', {}).get('model', 'unknown'))
+                usage = record.get('usage', {})
+                prompt_tokens = usage.get('prompt_tokens', 0) or record.get('prompt_tokens', 0)
+                completion_tokens = usage.get('completion_tokens', 0) or record.get('completion_tokens', 0)
+                
+                model_config = model_pricing.get(model, {})
+                if model_config:
+                    input_cost = (prompt_tokens / 1000) * model_config.get('input_cost_per_1k', 0)
+                    output_cost = (completion_tokens / 1000) * model_config.get('output_cost_per_1k', 0)
+                    total_cost += input_cost + output_cost
+        
+        # Extract detectors triggered
+        detectors_triggered = list(set(
+            detector_display_names.get(d.get('type', ''), d.get('type', 'Unknown'))
+            for d in trace_detections
+        ))
+        
+        # Format issues
+        issues = []
+        suggestions = set()
+        
+        for detection in trace_detections:
+            detector_type = detection.get('type', 'unknown')
+            detector_name = detector_display_names.get(detector_type, detector_type.title())
+            
+            issue = {
+                'detector': detector_name,
+                'problem': detection.get('description', 'Unknown issue'),
+                'estimated_cost': round(detection.get('waste_cost', 0), 6),
+                'waste_tokens': detection.get('waste_tokens', 0),
+                'severity': detection.get('severity', 'medium')
+            }
+            
+            # Add detector-specific details
+            if detector_type == 'retry_loop':
+                issue['retry_count'] = detection.get('retry_count', 0)
+            elif detector_type == 'fallback_storm':
+                issue['models_used'] = detection.get('models_used', [])
+                issue['num_calls'] = detection.get('num_calls', 0)
+            elif detector_type == 'overkill_model':
+                issue['expensive_model'] = detection.get('model_used', '')
+                issue['suggested_model'] = detection.get('suggested_model', '')
+            
+            issues.append(issue)
+            
+            # Add suggestions for this detector type
+            detector_suggestions_list = detector_suggestions.get(detector_type, [])
+            suggestions.update(detector_suggestions_list)
+        
+        # Create detailed report
+        report = {
+            'trace_id': trace_id,
+            'total_cost_usd': round(total_cost, 6),
+            'detectors_triggered': detectors_triggered,
+            'issues': issues,
+            'suggestions': sorted(list(suggestions)),
+            'metadata': {
+                'num_records': len(records),
+                'models_used': list(set(
+                    record.get('model', record.get('input', {}).get('model', 'unknown'))
+                    for record in records
+                )),
+                'time_span_minutes': _calculate_trace_time_span(records),
+                'total_waste_cost': round(sum(d.get('waste_cost', 0) for d in trace_detections), 6),
+                'total_waste_tokens': sum(d.get('waste_tokens', 0) for d in trace_detections)
+            }
+        }
+        
+        # Write report to file
+        # Sanitize trace_id for filename
+        safe_trace_id = "".join(c for c in trace_id if c.isalnum() or c in ('-', '_', '.')).rstrip()
+        if not safe_trace_id:
+            safe_trace_id = f"trace_{reports_generated}"
+            
+        output_file = output_dir / f"{safe_trace_id}.json"
+        
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(report, f, indent=2)
+            reports_generated += 1
+        except Exception as e:
+            click.echo(f"⚠️  Warning: Failed to write report for trace {trace_id}: {e}", err=True)
+    
+    return reports_generated
+
+
+def _calculate_trace_time_span(records: List[Dict[str, Any]]) -> float:
+    """Calculate time span of trace records in minutes"""
+    if len(records) < 2:
+        return 0.0
+    
+    try:
+        timestamps = []
+        for record in records:
+            ts_str = record.get('startTime', '')
+            if ts_str:
+                ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                timestamps.append(ts)
+        
+        if len(timestamps) < 2:
+            return 0.0
+        
+        span = max(timestamps) - min(timestamps)
+        return round(span.total_seconds() / 60, 2)
+        
+    except (ValueError, TypeError):
+        return 0.0
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
@@ -346,16 +541,27 @@ def cli():
 @click.option('--paste', is_flag=True, help='Read JSONL data from clipboard')
 @click.option('--summary', is_flag=True, help='Show cost summary with breakdown')
 @click.option('--summary-only', is_flag=True, help='Summary without trace IDs')
+@click.option('--detailed', is_flag=True, help='Generate detailed per-trace JSON reports')
+@click.option('--detailed-dir', type=click.Path(path_type=Path), default='detailed_output', 
+              help='Directory for detailed reports (default: detailed_output)')
+@click.option('--include-empty', is_flag=True, help='Include traces with no findings in detailed reports')
 def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: Optional[Path] = None, 
          demo: bool = False, stdin: bool = False, paste: bool = False, summary: bool = False, 
-         summary_only: bool = False) -> str:
+         summary_only: bool = False, detailed: bool = False, detailed_dir: Path = Path('detailed_output'),
+         include_empty: bool = False) -> str:
     """🎯 Scan logs for token waste patterns with production-grade suppression logic
 
-    Examples:
-      crashlens scan logs.jsonl              # Scan a specific file
-      crashlens scan --demo                              # Use built-in demo data
-      cat logs.jsonl | crashlens scan --stdin            # Read from pipe
-      crashlens scan --paste                             # Read from clipboard"""
+    📦 Examples:
+
+  crashlens scan logs.jsonl                    # Scan a specific log file
+  crashlens scan --demo                        # Run on built-in sample logs
+  cat logs.jsonl | crashlens scan --stdin      # Pipe logs via stdin
+  crashlens scan --paste                                 # Read logs from clipboard
+  crashlens scan --detailed                    # Generate traces JSON reports
+  crashlens scan --summary                     # Cost summary with categories
+  crashlens scan --summary-only                # Show summary only 
+
+    """
     
     # Validate input options
     input_count = sum([bool(logfile), demo, stdin, paste])
@@ -574,7 +780,14 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
             continue
     
     # Get suppression summary
-    summary = suppression_engine.get_suppression_summary()
+    suppression_summary = suppression_engine.get_suppression_summary()
+    
+    # Generate detailed per-trace reports if requested
+    if detailed:
+        detailed_count = generate_detailed_reports(
+            traces, all_active_detections, detailed_dir, include_empty, pricing_config.get('models', {})
+        )
+        click.echo(f"✅ Generated {detailed_count} detailed trace reports in {detailed_dir}/")
     
     # Generate report based on format and write to report.md
     report_path = Path.cwd() / "report.md"
