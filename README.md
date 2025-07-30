@@ -329,7 +329,9 @@ crashlens scan path/to/your-logs.jsonl
 ```sh
 crashlens scan --demo
 ```
-- Runs analysis on built-in example logs (no file needed).
+- Runs analysis on built-in example logs (requires `examples-logs/demo-logs.jsonl` file).
+- **Note**: If installing from PyPI, you'll need to create sample logs or use your own data.
+- **From source**: Demo data is included in the repository.
 
 ### 3. **Scan from stdin (pipe)**
 ```sh
@@ -571,7 +573,7 @@ crashlens scan --summary-only
 |--------|-------------|---------|
 | `-f, --format` | Output format: `slack`, `markdown`, `json`, `human` | `--format json` |
 | `-c, --config` | Custom pricing config file path | `--config my-pricing.yaml` |
-| `--demo` | Use built-in demo data | `crashlens scan --demo` |
+| `--demo` | Use built-in demo data (requires examples-logs/demo-logs.jsonl) | `crashlens scan --demo` |
 | `--stdin` | Read from standard input | `cat logs.jsonl \| crashlens scan --stdin` |
 | `--paste` | Read JSONL data from clipboard | `crashlens scan --paste` |
 | `--summary` | Show cost summary with breakdown | `crashlens scan --summary` |
@@ -596,7 +598,7 @@ Each file contains:
 CrashLens supports multiple input methods:
 
 1. **File input**: `crashlens scan path/to/logs.jsonl`
-2. **Demo mode**: `crashlens scan --demo` (uses built-in sample data)
+2. **Demo mode**: `crashlens scan --demo` (requires examples-logs/demo-logs.jsonl file)
 3. **Standard input**: `cat logs.jsonl | crashlens scan --stdin`
 4. **Clipboard**: `crashlens scan --paste` (paste logs interactively)
 
