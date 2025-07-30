@@ -56,20 +56,28 @@ class OverkillModelDetector:
             "claude-2.1": "claude-instant-1"
         }
     
-    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None, already_flagged_ids: Optional[set] = None) -> List[Dict[str, Any]]:
         """
         Detect overkill model usage with enhanced cost estimation and routing suggestions
         
         Args:
             traces: Dictionary of trace_id -> list of records
             model_pricing: Pricing configuration for cost estimation
+            already_flagged_ids: Set of trace IDs already claimed by higher-priority detectors
             
         Returns:
             List of detection results with cost estimates and routing suggestions
         """
+        if already_flagged_ids is None:
+            already_flagged_ids = set()
+            
         detections = []
         
         for trace_id, records in traces.items():
+            # Skip traces already claimed by higher-priority detectors
+            if trace_id in already_flagged_ids:
+                continue
+                
             for record in records:
                 detection = self._check_overkill_pattern(trace_id, record, model_pricing)
                 if detection:

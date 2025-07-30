@@ -33,7 +33,7 @@ class RetryLoopDetector:
         self.time_window = timedelta(minutes=time_window_minutes)
         self.max_retry_interval = timedelta(minutes=max_retry_interval_minutes)
 
-    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def detect(self, traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None, already_flagged_ids: Optional[set] = None) -> List[Dict[str, Any]]:
         """
         Analyzes all traces and detects retry loops based on exact string matching.
 
@@ -41,13 +41,21 @@ class RetryLoopDetector:
             traces (Dict[str, List[Dict[str, Any]]]): A dictionary where keys are
                                                       trace_ids and values are lists
                                                       of log records.
+            model_pricing: Optional pricing configuration
+            already_flagged_ids: Set of trace IDs already claimed by higher-priority detectors
 
         Returns:
             List[Dict[str, Any]]: A list of detection dictionaries, one for each
                                   identified retry loop.
         """
+        if already_flagged_ids is None:
+            already_flagged_ids = set()
+            
         detections = []
         for trace_id, records in traces.items():
+            # Skip traces already claimed by higher-priority detectors
+            if trace_id in already_flagged_ids:
+                continue
             # Optimization: a loop cannot occur if the number of records
             # is not greater than the retry threshold.
             if len(records) <= self.max_retries:
