@@ -134,7 +134,6 @@ class MarkdownFormatter:
                     'count': 0,
                     'total_waste_cost': 0.0,
                     'total_waste_tokens': 0,
-                    'sample_prompts': [],
                     'trace_ids': [],
                     'severity': detection.get('severity', 'medium'),
                     'detections': []
@@ -150,11 +149,6 @@ class MarkdownFormatter:
             trace_id = detection.get('trace_id')
             if trace_id and trace_id not in group['trace_ids']:
                 group['trace_ids'].append(trace_id)
-            
-            # Collect sample prompts (up to 3 unique ones)
-            sample_prompt = detection.get('sample_prompt', '')
-            if sample_prompt and sample_prompt not in group['sample_prompts'] and len(group['sample_prompts']) < 3:
-                group['sample_prompts'].append(sample_prompt)
         
         return aggregated
 
@@ -164,12 +158,6 @@ class MarkdownFormatter:
         detector = group_data.get('detector', 'unknown').replace('_', ' ').title()
         lines.append(f"**Issue**: {group_data['count']} traces flagged by {detector}")
         lines.append("")
-        # Sample prompts (suppress in summary_only)
-        if group_data['sample_prompts'] and not summary_only:
-            lines.append("**Sample Prompts**:")
-            for i, prompt in enumerate(group_data['sample_prompts'], 1):
-                lines.append(f"{i}. `{prompt[:50]}{'...' if len(prompt) > 50 else ''}`")
-            lines.append("")
         # Suggested fix (optional, can be improved per detector)
         if detector.lower() == 'overkillmodeldetector':
             lines.append(f"**Suggested Fix**: Route short prompts to `{group_data['suggested_model']}`")
@@ -225,14 +213,6 @@ class MarkdownFormatter:
         # Trace ID (suppress in summary_only)
         if not summary_only:
             lines.append(f"- **Trace ID**: `{detection.get('trace_id', 'unknown')}`")
-            lines.append("")
-        
-        # Sample prompt (suppress in summary_only)
-        if detection.get('sample_prompt') and not summary_only:
-            lines.append("**Sample Prompt**:")
-            lines.append("```")
-            lines.append(detection['sample_prompt'])
-            lines.append("```")
             lines.append("")
         
         return "\n".join(lines) 

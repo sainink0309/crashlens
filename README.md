@@ -80,15 +80,19 @@ Now you can run `crashlens` from any folder.
 Below is a sample of what the actual `report.md` looks like after running CrashLens:
 
 🚨 **CrashLens Token Waste Report** 🚨
-📊 Analysis Date: 2025-07-29 12:25:21
-🔍 Traces Analyzed: 156
-💰 Total AI Spend: $1.18
-💸 Potential Savings: $0.92
+📊 Analysis Date: 2025-07-31 15:24:48
 
-❓ **Overkill Model** | 73 traces | $0.77 wasted | Fix: optimize usage
-   🎯 **Wasted tokens**: 18,812
-   🔗 **Traces** (68): trace_overkill_01, trace_norm_02, trace_fallback_success_01, trace_overkill_02, trace_overkill_03, +63 more
-   📄 **Samples**: "What is 2+2?...", "Draft a comprehensive business..."
+| Metric | Value |
+|--------|-------|
+| Total AI Spend | $1.18 |
+| Total Potential Savings | $0.82 |
+| Wasted Tokens | 19,831 |
+| Issues Found | 73 |
+| Traces Analyzed | 156 |
+
+❓ **Overkill Model** | 59 traces | $0.68 wasted | Fix: optimize usage
+   🎯 **Wasted tokens**: 16,496
+   🔗 **Traces** (57): trace_overkill_01, trace_norm_02, trace_overkill_02, trace_overkill_03, trace_norm_06, +52 more
 
 📢 **Fallback Failure** | 7 traces | $0.08 wasted | Fix: remove redundant fallbacks
    🎯 **Wasted tokens**: 1,330
@@ -97,16 +101,27 @@ Below is a sample of what the actual `report.md` looks like after running CrashL
 ⚡ **Fallback Storm** | 5 traces | $0.07 wasted | Fix: optimize model selection
    🎯 **Wasted tokens**: 1,877
    🔗 **Traces** (5): trace_fallback_failure_01, trace_fallback_failure_02, trace_fallback_failure_03, trace_fallback_failure_04, trace_fallback_failure_05
-   📄 **Samples**: "Write a Python script to analy...", "Create a function in Go to rev..."
 
 🔄 **Retry Loop** | 2 traces | $0.0001 wasted | Fix: exponential backoff
    🎯 **Wasted tokens**: 128
    🔗 **Traces** (2): trace_retry_loop_07, trace_retry_loop_10
-   📄 **Samples**: "What is the current time in To...", "What is the capital of India?..."
 
 
-💡 Top 3 Expensive Traces: 1. trace_norm_76 → gpt-4 → $0.09 | 2. trace_norm_65 → gpt-4 → $0.07 | 3. trace_norm_38 → gpt-4 → $0.06
-📊 **Model Breakdown**: gpt-4: $1.16 (98%) | gpt-3.5-turbo: $0.02 (2%)
+## Top Expensive Traces
+
+| Rank | Trace ID | Model | Cost |
+|------|----------|-------|------|
+| 1 | trace_norm_76 | gpt-4 | $0.09 |
+| 2 | trace_norm_65 | gpt-4 | $0.07 |
+| 3 | trace_norm_38 | gpt-4 | $0.06 |
+
+## Cost by Model
+
+| Model | Cost | Percentage |
+|-------|------|------------|
+| gpt-4 | $1.16 | 98% |
+| gpt-3.5-turbo | $0.02 | 2% |
+
 
 
 ---
@@ -217,33 +232,28 @@ crashlens scan examples/retry-test.jsonl
 crashlens scan --demo
 
 ```
-🎬 Running analysis on built-in demo data...
-🔒 CrashLens runs 100% locally. No data leaves your system.
-✅ Slack report written to C:\Users\LawLight\OneDrive\Desktop\crashlens\report.md
 🚨 **CrashLens Token Waste Report** 🚨
-📊 Analysis Date: 2025-07-30 14:01:37
+📊 Analysis Date: 2025-07-31 15:22:08
 
 | Metric | Value |
 |--------|-------|
 | Total AI Spend | $0.09 |
-| Total Potential Savings | $0.09 |
-| Wasted Tokens | 2,549 |
-| Issues Found | 12 |
+| Total Potential Savings | $0.07 |
+| Wasted Tokens | 1,414 |
+| Issues Found | 8 |
 | Traces Analyzed | 12 |
 
 📢 **Fallback Failure** | 5 traces | $0.07 wasted | Fix: remove redundant fallbacks
    🎯 **Wasted tokens**: 1,275
    🔗 **Traces** (5): demo_fallback_01, demo_fallback_02, demo_fallback_03, demo_fallback_04, demo_fallback_05
 
-❓ **Overkill Model** | 6 traces | $0.02 wasted | Fix: optimize usage
-   🎯 **Wasted tokens**: 1,166
-   🔗 **Traces** (6): demo_overkill_01, demo_overkill_02, demo_fallback_01, demo_fallback_03, demo_fallback_04, +1 more
-   📄 **Samples**: "What is 2+2?...", "What is the capital of France?..."
+❓ **Overkill Model** | 2 traces | $0.0007 wasted | Fix: optimize usage
+   🎯 **Wasted tokens**: 31
+   🔗 **Traces** (2): demo_overkill_01, demo_overkill_02
 
 🔄 **Retry Loop** | 1 traces | $0.0002 wasted | Fix: exponential backoff
    🎯 **Wasted tokens**: 108
    🔗 **Traces** (1): demo_retry_01
-   📄 **Samples**: "What is the weather like today..."
 
 
 ## Top Expensive Traces
@@ -260,7 +270,8 @@ crashlens scan --demo
 |-------|------|------------|
 | gpt-4 | $0.09 | 99% |
 | gpt-3.5-turbo | $0.0012 | 1% |
-```
+
+
 
 ---
 
@@ -288,7 +299,7 @@ crashlens scan --demo
 - 🔒 **Security-by-design** (runs 100% locally, no API calls, no data leaves your machine)
 - 🚦 **Coming soon**: Policy enforcement, live CLI firewall, more integrations
 
----
+
 
 ## 📄 Log File Structure
 

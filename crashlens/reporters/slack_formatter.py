@@ -114,11 +114,6 @@ class SlackFormatter:
                         trace_list += f", +{len(trace_ids) - 5} more"
                     output.append(f"   🔗 **Traces** ({trace_count}): {trace_list}")
             
-            # Show sample prompts (vital for debugging routing logic)
-            if group_data['sample_prompts'] and not summary_only:
-                sample_str = ', '.join(f'"{p[:30]}..."' for p in group_data['sample_prompts'][:2])
-                output.append(f"   📄 **Samples**: {sample_str}")
-            
             output.append("")  # Add spacing between detector groups
         
         output.append("")
@@ -217,7 +212,6 @@ class SlackFormatter:
                     'count': 0,
                     'total_waste_cost': 0.0,
                     'total_waste_tokens': 0,
-                    'sample_prompts': [],
                     'trace_ids': [],
                     'detections': []
                 }
@@ -232,11 +226,6 @@ class SlackFormatter:
             trace_id = detection.get('trace_id')
             if trace_id and trace_id not in group['trace_ids']:
                 group['trace_ids'].append(trace_id)
-            
-            # Collect sample prompts (up to 3 unique ones)
-            sample_prompt = detection.get('sample_prompt', '')
-            if sample_prompt and sample_prompt not in group['sample_prompts'] and len(group['sample_prompts']) < 3:
-                group['sample_prompts'].append(sample_prompt)
         
         return aggregated
 
