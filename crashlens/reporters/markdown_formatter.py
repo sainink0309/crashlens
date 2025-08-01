@@ -22,7 +22,7 @@ class MarkdownFormatter:
     def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None, summary_only: bool = False) -> str:
         """Format detections in Markdown output"""
         if not detections:
-            return "🔒 CrashLens runs 100% locally. No data leaves your system.\n\n**No token waste patterns detected! Your GPT usage looks efficient.**"
+            return "**No token waste patterns detected! Your GPT usage looks efficient.**"
         
         output = []
         output.append("🔒 CrashLens runs 100% locally. No data leaves your system.\n")
@@ -102,6 +102,14 @@ class MarkdownFormatter:
         # Add cost breakdown sections (if we have real costs)
         if total_ai_spend > 0:
             self._add_cost_breakdown_tables(output, traces, summary_only)
+        
+        # Add next steps section
+        output.append("## Next Steps")
+        output.append("")
+        output.append("- Run `crashlens --detailed` for grouped JSON reports")
+        output.append("- Review trace patterns to optimize model routing")
+        output.append("- Implement suggested fixes to reduce token waste")
+        output.append("")
         
         return "\n".join(output)
     

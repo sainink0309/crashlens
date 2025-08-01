@@ -2,98 +2,77 @@
 
 # CrashLens Token Waste Report
 
-**Analysis Date:** 2025-07-30 13:59:50  
+**Analysis Date:** 2025-07-31 22:11:51  
 
-**Traces Analyzed:** 156  
+**Traces Analyzed:** 12  
 
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Total AI Spend | $1.18 |
-| Total Potential Savings | $0.92 |
-| Wasted Tokens | 22,147 |
-| Issues Found | 87 |
-| Traces Analyzed | 156 |
+| Total AI Spend | $0.09 |
+| Total Potential Savings | $0.07 |
+| Wasted Tokens | 1,414 |
+| Issues Found | 8 |
+| Traces Analyzed | 12 |
 
-## Retry Loop (2 issues)
-
-| Metric | Value |
-|--------|-------|
-| Total Waste Cost | $0.0001 |
-| Total Waste Tokens | 128 |
-
-**Trace IDs**:
-`trace_retry_loop_07, trace_retry_loop_10`
-
-**Issue**: 2 traces flagged by Retry Loop
-
-**Sample Prompts**:
-1. `What is the current time in Tokyo?`
-2. `What is the capital of India?`
-
-
-## Fallback Storm (5 issues)
+## Retry Loop (1 issues)
 
 | Metric | Value |
 |--------|-------|
-| Total Waste Cost | $0.0669 |
-| Total Waste Tokens | 1,877 |
+| Total Waste Cost | $0.0002 |
+| Total Waste Tokens | 108 |
 
 **Trace IDs**:
-`trace_fallback_failure_01, trace_fallback_failure_02, trace_fallback_failure_03, trace_fallback_failure_04, trace_fallback_failure_05`
+`demo_retry_01`
 
-**Issue**: 5 traces flagged by Fallback Storm
-
-**Sample Prompts**:
-1. `Write a Python script to analyze sentiment from a ...`
-2. `Create a function in Go to reverse a string, make ...`
-3. `Summarize the key arguments in the philosophical t...`
+**Issue**: 1 traces flagged by Retry Loop
 
 
-## Fallback Failure (7 issues)
+## Fallback Failure (5 issues)
 
 | Metric | Value |
 |--------|-------|
-| Total Waste Cost | $0.0770 |
-| Total Waste Tokens | 1,330 |
+| Total Waste Cost | $0.0728 |
+| Total Waste Tokens | 1,275 |
 
 **Trace IDs**:
-`trace_fallback_success_01, trace_fallback_success_02, trace_fallback_success_03, trace_fallback_success_04, trace_fallback_success_05, trace_fallback_success_06, trace_fallback_success_07`
+`demo_fallback_01, demo_fallback_02, demo_fallback_03, demo_fallback_04, demo_fallback_05`
 
-**Issue**: 7 traces flagged by Fallback Failure
+**Issue**: 5 traces flagged by Fallback Failure
 
 
-## Overkill Model (73 issues)
+## Overkill Model (2 issues)
 
 | Metric | Value |
 |--------|-------|
-| Total Waste Cost | $0.7717 |
-| Total Waste Tokens | 18,812 |
+| Total Waste Cost | $0.0007 |
+| Total Waste Tokens | 31 |
 
 **Trace IDs**:
-`trace_overkill_01, trace_norm_02, trace_fallback_success_01, trace_overkill_02, trace_overkill_03, trace_norm_06, trace_overkill_04, trace_fallback_failure_01, trace_overkill_05, trace_norm_11, +58 more`
+`demo_overkill_01, demo_overkill_02`
 
-**Issue**: 73 traces flagged by Overkill Model
-
-**Sample Prompts**:
-1. `What is 2+2?`
-2. `Draft a comprehensive business plan for a new e-co...`
-3. `Generate a complex SQL query to find users who hav...`
+**Issue**: 2 traces flagged by Overkill Model
 
 
 ## Top Expensive Traces
 
 | Rank | Trace ID | Model | Cost |
 |------|----------|-------|------|
-| 1 | trace_norm_76 | gpt-4 | $0.09 |
-| 2 | trace_norm_65 | gpt-4 | $0.07 |
-| 3 | trace_norm_38 | gpt-4 | $0.06 |
+| 1 | demo_norm_03 | gpt-4 | $0.03 |
+| 2 | demo_norm_04 | gpt-4 | $0.02 |
+| 3 | demo_fallback_05 | gpt-3.5-turbo | $0.02 |
 
 ## Cost by Model
 
 | Model | Cost | Percentage |
 |-------|------|------------|
-| gpt-4 | $1.16 | 98% |
-| gpt-3.5-turbo | $0.02 | 2% |
+| gpt-4 | $0.09 | 99% |
+| gpt-3.5-turbo | $0.0012 | 1% |
+
+## Next Steps
+
+- Run `crashlens --detailed` for grouped JSON reports
+- Review trace patterns to optimize model routing
+- Implement suggested fixes to reduce token waste

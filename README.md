@@ -373,7 +373,6 @@ crashlens scan --summary-only     # Summary without trace IDs
 ```sh
 crashlens scan --format json      # JSON output
 crashlens scan --format markdown  # Markdown format  
-crashlens scan --format human     # Human-readable terminal output
 ```
 - Default format is `slack` for team sharing.
 
@@ -582,7 +581,7 @@ crashlens scan --summary-only
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `-f, --format` | Output format: `slack`, `markdown`, `json`, `human` | `--format json` |
+| `-f, --format` | Output format: `slack`, `markdown`, `json` | `--format json` |
 | `-c, --config` | Custom pricing config file path | `--config my-pricing.yaml` |
 | `--demo` | Use built-in demo data (requires examples-logs/demo-logs.jsonl) | `crashlens scan --demo` |
 | `--stdin` | Read from standard input | `cat logs.jsonl \| crashlens scan --stdin` |
@@ -617,7 +616,6 @@ CrashLens supports multiple input methods:
 - **slack** (default): Slack-formatted report for team sharing
 - **markdown**: Clean Markdown for documentation
 - **json**: Machine-readable JSON for automation
-- **human**: Human-friendly terminal output
 
 ### 💡 Pro Tips
 - Use `--demo` to test CrashLens without your own logs

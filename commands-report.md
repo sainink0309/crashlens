@@ -42,14 +42,13 @@ python -m crashlens scan [OPTIONS] LOG_FILE
 #### Format Options (`-f`, `--format`)
 - **Type:** Choice
 - **Default:** `slack`
-- **Values:** `slack`, `markdown`, `json`, `human`
+- **Values:** `slack`, `markdown`, `json`
 - **Description:** Output format for detection results
 
 **Format Details:**
 - `slack` - Slack-formatted output with emojis and structured messaging
 - `markdown` - Markdown-formatted output suitable for documentation
 - `json` - Machine-readable JSON output for programmatic use
-- `human` - Human-readable terminal output with clear formatting
 
 #### Configuration Options (`-c`, `--config`)
 - **Type:** Path
@@ -144,20 +143,6 @@ python -m crashlens scan examples/demo-logs.jsonl -f json
 ]
 ```
 
-### 4. Human Format
-```bash
-python -m crashlens scan examples/demo-logs.jsonl -f human
-```
-**Sample Output:**
-```
-✅ CrashLens Scan Complete. 1 issues found.
-
-[ MEDIUM SEVERITY ] Overkill Model
-  • Trace ID:          trace_123
-  • Description:       Using gpt-4 for simple task (estimated cost: $0.000600)
-  • Potential Waste:   $0.000600
-```
-
 ---
 
 ## Configuration System
@@ -193,9 +178,6 @@ python -m crashlens scan examples/demo-logs.jsonl
 
 ### Advanced Usage
 ```bash
-# Human-readable output
-python -m crashlens scan examples/demo-logs.jsonl -f human
-
 # JSON output for automation
 python -m crashlens scan examples/demo-logs.jsonl -f json
 
@@ -210,7 +192,7 @@ python -m crashlens scan examples/demo-logs.jsonl -f markdown
 ```bash
 # Using Poetry (recommended)
 poetry run python -m crashlens scan examples/demo-logs.jsonl
-poetry run python -m crashlens scan examples/demo-logs.jsonl -f human
+poetry run python -m crashlens scan examples/demo-logs.jsonl -f markdown
 ```
 
 ---

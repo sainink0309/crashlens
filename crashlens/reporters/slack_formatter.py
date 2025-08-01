@@ -44,7 +44,7 @@ class SlackFormatter:
     def format(self, detections: List[Dict[str, Any]], traces: Dict[str, List[Dict[str, Any]]], model_pricing: Optional[Dict[str, Any]] = None, summary_only: bool = False, include_json_footer: bool = False) -> str:
         """Format detections in FinOps-focused compact format"""
         if not detections:
-            return "🔒 CrashLens runs 100% locally. No data leaves your system.\n✅ No token waste patterns detected! Your GPT usage looks efficient."
+            return "🔒 CrashLens runs 100% locally. No data leaves your system.\n\n✅ *No token waste patterns detected!* Your GPT usage looks efficient. 🎉"
         
         # Calculate costs and metrics
         total_ai_spend = self._calculate_total_ai_spend(traces, model_pricing)
@@ -59,23 +59,22 @@ class SlackFormatter:
         output = []
         if summary_only:
             output.append("🔒 CrashLens runs 100% locally. No data leaves your system.")
-            output.append("📝 Summary-only mode: Prompts, sample inputs, and trace IDs are suppressed for safe internal sharing.")
+            output.append("📝 *Summary-only mode:* Prompts, sample inputs, and trace IDs are suppressed for safe internal sharing.")
             output.append("")
         
-        # Enhanced header with summary table
-        output.append(f"🚨 **CrashLens Token Waste Report** 🚨")
-        output.append(f"📊 Analysis Date: {timestamp}")
+        # Enhanced header with Slack-native formatting
+        output.append(f"🚨 *CrashLens Token Waste Report* 🚨")
+        output.append(f"📊 *Analysis Date:* {timestamp}")
         output.append("")
         
-        # Summary table
+        # Summary section with bullet points
         total_waste_tokens = sum(d.get('waste_tokens', 0) for d in detections)
-        output.append("| Metric | Value |")
-        output.append("|--------|-------|")
-        output.append(f"| Total AI Spend | {spend_str} |")
-        output.append(f"| Total Potential Savings | {savings_str} |")
-        output.append(f"| Wasted Tokens | {total_waste_tokens:,} |")
-        output.append(f"| Issues Found | {len(detections)} |")
-        output.append(f"| Traces Analyzed | {len(traces)} |")
+        output.append("📋 *Report Summary:*")
+        output.append(f"• 💰 *Total AI Spend:* {spend_str}")
+        output.append(f"• 🔥 *Potential Savings:* {savings_str}")
+        output.append(f"• 🎯 *Wasted Tokens:* {total_waste_tokens:,}")
+        output.append(f"• ⚠️ *Issues Found:* {len(detections)}")
+        output.append(f"• 📈 *Traces Analyzed:* {len(traces)}")
         output.append("")
         
         # Detector summaries - sorted by waste amount
@@ -98,11 +97,12 @@ class SlackFormatter:
             # More specific fix suggestions
             fix_hint = self._get_specific_fix_suggestion(group_data)
             
-            output.append(f"{emoji} **{detector_name}** | {group_data['count']} traces | {waste_str} wasted | Fix: {fix_hint}")
+            output.append(f"{emoji} *{detector_name}* • {group_data['count']} traces • {waste_str} wasted")
+            output.append(f"   💡 *Fix:* {fix_hint}")
             
-            # Add essential debugging details with more emojis
+            # Add essential debugging details
             if group_data['total_waste_tokens'] > 0:
-                output.append(f"   🎯 **Wasted tokens**: {group_data['total_waste_tokens']:,}")
+                output.append(f"   🎯 *Wasted tokens:* {group_data['total_waste_tokens']:,}")
             
             # Show affected trace IDs (critical for debugging)
             if not summary_only:
@@ -112,7 +112,7 @@ class SlackFormatter:
                     trace_list = ', '.join(trace_ids[:5])  # Show up to 5 trace IDs
                     if len(trace_ids) > 5:
                         trace_list += f", +{len(trace_ids) - 5} more"
-                    output.append(f"   🔗 **Traces** ({trace_count}): {trace_list}")
+                    output.append(f"   🔗 *Traces ({trace_count}):* `{trace_list}`")
             
             output.append("")  # Add spacing between detector groups
         
@@ -124,6 +124,13 @@ class SlackFormatter:
         # Model breakdown - single line format
         self._add_model_breakdown(output, traces)
         
+        # Add call to action
+        output.append("💡 *Next Steps:*")
+        output.append("• Run `crashlens --detailed` for grouped JSON reports")
+        output.append("• Review trace patterns to optimize model routing")
+        output.append("• Implement suggested fixes to reduce token waste")
+        output.append("")
+        
         # Optional JSON footer for machine-readable data
         if include_json_footer:
             self._add_json_footer(output, detections, traces, total_ai_spend, total_savings)
@@ -131,7 +138,7 @@ class SlackFormatter:
         return "\n".join(output)
     
     def _add_top_traces(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]], summary_only: bool):
-        """Add top expensive traces section with table format"""
+        """Add top expensive traces section with Slack-native formatting"""
         trace_costs = {}
         
         for trace_id, records in traces.items():
@@ -142,24 +149,20 @@ class SlackFormatter:
         if trace_costs:
             sorted_traces = sorted(trace_costs.items(), key=lambda x: x[1], reverse=True)[:self.max_traces_to_show]
             
-            output.append("## Top Expensive Traces")
-            output.append("")
-            output.append("| Rank | Trace ID | Model | Cost |")
-            output.append("|------|----------|-------|------|")
-            
+            output.append("🏆 *Top Expensive Traces:*")
             for i, (trace_id, cost) in enumerate(sorted_traces, 1):
                 cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                 if summary_only:
-                    output.append(f"| {i} | trace_*** | *** | {cost_str} |")
+                    output.append(f"• #{i} → `trace_***` → {cost_str}")
                 else:
                     # Get model from first record
                     first_record = traces[trace_id][0] if traces[trace_id] else {}
                     model = first_record.get('input', {}).get('model', first_record.get('model', 'unknown'))
-                    output.append(f"| {i} | {trace_id} | {model} | {cost_str} |")
+                    output.append(f"• #{i} → `{trace_id}` → {model} → {cost_str}")
             output.append("")
     
     def _add_model_breakdown(self, output: List[str], traces: Dict[str, List[Dict[str, Any]]]):
-        """Add model cost breakdown with table format"""
+        """Add model cost breakdown with Slack-native formatting"""
         from collections import defaultdict
         
         model_costs = defaultdict(float)
@@ -174,15 +177,11 @@ class SlackFormatter:
             total_cost = sum(model_costs.values())
             sorted_models = sorted(model_costs.items(), key=lambda x: x[1], reverse=True)
             
-            output.append("## Cost by Model")
-            output.append("")
-            output.append("| Model | Cost | Percentage |")
-            output.append("|-------|------|------------|")
-            
+            output.append("🤖 *Cost by Model:*")
             for model, cost in sorted_models:
                 cost_str = f"${cost:.4f}" if cost < 0.01 else f"${cost:.2f}"
                 percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-                output.append(f"| {model} | {cost_str} | {percentage:.0f}% |")
+                output.append(f"• {model} → {cost_str} ({percentage:.0f}%)")
             output.append("")
 
     def _aggregate_detections(self, detections: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:

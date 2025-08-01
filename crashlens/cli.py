@@ -29,7 +29,7 @@ DETECTOR_PRIORITY = {
     'OverkillModelDetector': 4,   # Overkill for simple tasks - lowest priority
 }
 
-# Detector display names for human-readable output
+# Detector display names for output formatting
 DETECTOR_DISPLAY_NAMES = {
     'RetryLoopDetector': 'Retry Loop',
     'FallbackStormDetector': 'Fallback Storm', 
@@ -215,117 +215,6 @@ def load_pricing_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 
-def _format_human_readable(active_detections: List[Dict[str, Any]], total_waste_cost: float, traces: Optional[Dict[str, List[Dict[str, Any]]]] = None, model_pricing: Optional[Dict[str, Any]] = None) -> str:
-    """📊 Generate comprehensive human-centric output with detailed information"""
-    
-    # Calculate additional metrics
-    total_traces = len(traces) if traces else 0
-    total_waste_tokens = sum(d.get('waste_tokens', 0) for d in active_detections)
-    
-    # Calculate model breakdown
-    model_costs = {}
-    if traces and model_pricing:
-        for trace_id, records in traces.items():
-            for record in records:
-                model = record.get('model') or record.get('input', {}).get('model', 'unknown')
-                if 'usage' in record:
-                    usage = record.get('usage', {})
-                    prompt_tokens = usage.get('prompt_tokens', 0)
-                    completion_tokens = usage.get('completion_tokens', 0)
-                else:
-                    prompt_tokens = record.get('prompt_tokens', 0)
-                    completion_tokens = record.get('completion_tokens', 0)
-                
-                if model in model_pricing:
-                    model_config = model_pricing[model]
-                    input_cost_per_1k = model_config.get('input_cost_per_1k', 0)
-                    output_cost_per_1k = model_config.get('output_cost_per_1k', 0)
-                    input_cost_per_1m = model_config.get('input_cost_per_1m', 0)
-                    output_cost_per_1m = model_config.get('output_cost_per_1m', 0)
-                    
-                    if input_cost_per_1k > 0:
-                        input_cost = input_cost_per_1k / 1000
-                    else:
-                        input_cost = input_cost_per_1m / 1000000
-                        
-                    if output_cost_per_1k > 0:
-                        output_cost = output_cost_per_1k / 1000
-                    else:
-                        output_cost = output_cost_per_1m / 1000000
-                    
-                    cost = (prompt_tokens * input_cost) + (completion_tokens * output_cost)
-                    model_costs[model] = model_costs.get(model, 0) + cost
-    
-    lines = [
-        "🚨 **CrashLens Token Waste Report**",
-        "=" * 60,
-        f"📅 **Analysis Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        f"🔍 **Traces Analyzed**: {total_traces:,}",
-        f"💰 **Total AI Spend**: ${sum(model_costs.values()):.4f}",
-        f"💸 **Total Potential Savings**: ${total_waste_cost:.4f}",
-        f"📊 **Issues Found**: {len(active_detections)}",
-        f"🎯 **Wasted Tokens**: {total_waste_tokens:,}",
-        ""
-    ]
-    
-    # Add model breakdown
-    if model_costs:
-        lines.append("📈 **Cost by Model**:")
-        sorted_models = sorted(model_costs.items(), key=lambda x: x[1], reverse=True)
-        for model, cost in sorted_models[:5]:  # Top 5 models
-            percentage = (cost / sum(model_costs.values())) * 100
-            lines.append(f"  • {model}: ${cost:.4f} ({percentage:.1f}%)")
-        lines.append("")
-    
-    # Group detections by type for reporting
-    detections_by_type = {}
-    for detection in active_detections:
-        detector_name = detection.get('type', 'unknown')
-        if detector_name not in detections_by_type:
-            detections_by_type[detector_name] = []
-        detections_by_type[detector_name].append(detection)
-    
-    # Add detection details
-    lines.append("🔍 **Issue Breakdown**:")
-    for detector_type, detections in detections_by_type.items():
-        if not detections:
-            continue
-        
-        display_name = DETECTOR_DISPLAY_NAMES.get(detector_type + 'Detector', detector_type.title())
-        icon = {"retry_loop": "🔄", "fallback_storm": "⚡", "fallback_failure": "📢", "overkill_model": "❓"}.get(detector_type, "⚠️")
-        
-        waste_cost = sum(d.get('waste_cost', 0) for d in detections)
-        waste_tokens = sum(d.get('waste_tokens', 0) for d in detections)
-        
-        lines.append(f"{icon} **{display_name}** ({len(detections)} issues)")
-        lines.append(f"  💰 Waste Cost: ${waste_cost:.4f}")
-        lines.append(f"  🎯 Waste Tokens: {waste_tokens:,}")
-        
-        # Add sample prompts
-        sample_prompts = [d.get('sample_prompt', '')[:50] + '...' for d in detections[:3] if d.get('sample_prompt')]
-        if sample_prompts:
-            lines.append(f"  📝 Sample prompts: {', '.join(sample_prompts)}")
-        
-        # Add trace IDs for first few
-        trace_ids = [d.get('trace_id', '') for d in detections[:5] if d.get('trace_id')]
-        if trace_ids:
-            lines.append(f"  🔗 Sample traces: {', '.join(trace_ids)}")
-        
-        lines.append("")
-    
-    # Add recommendations
-    lines.append("💡 **Recommendations**:")
-    if detections_by_type.get('overkill_model'):
-        lines.append("  • Consider using cheaper models for simple tasks")
-    if detections_by_type.get('retry_loop'):
-        lines.append("  • Implement exponential backoff for retries")
-    if detections_by_type.get('fallback_storm'):
-        lines.append("  • Optimize model selection strategy")
-    if detections_by_type.get('fallback_failure'):
-        lines.append("  • Remove unnecessary fallbacks")
-    
-    return "\n".join(lines)
-
 
 def generate_detailed_reports(
     traces: Dict[str, List[Dict[str, Any]]], 
@@ -428,7 +317,6 @@ def generate_detailed_reports(
             elif detector_type == 'overkill_model':
                 issue['expensive_model'] = detection.get('model_used', '')
                 issue['suggested_model'] = detection.get('suggested_model', '')
-                issue['prompt_preview'] = detection.get('sample_prompt', '')[:100] + '...' if detection.get('sample_prompt') else ''
             
             issues.append(issue)
             total_waste_cost += detection.get('waste_cost', 0)
@@ -506,7 +394,7 @@ def cli():
 @click.command()
 @click.argument('logfile', type=click.Path(path_type=Path), required=False)
 @click.option('--format', '-f', 'output_format', 
-              type=click.Choice(['slack', 'markdown', 'json', 'human'], case_sensitive=False),
+              type=click.Choice(['slack', 'markdown', 'json'], case_sensitive=False),
               default='slack', help='Output format')
 @click.option('--config', '-c', type=click.Path(path_type=Path),
               help='Custom pricing config file path')
@@ -637,7 +525,7 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
         click.echo(f"⚠️  No traces found in {source}")
         return ""
     
-    click.echo("🔒 CrashLens runs 100% locally. No data leaves your system.")
+    # click.echo("🔒 CrashLens runs 100% locally. No data leaves your system.")
     
     # Handle summary modes
     if summary or summary_only:
@@ -784,15 +672,6 @@ def scan(logfile: Optional[Path] = None, output_format: str = 'slack', config: O
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(output)
         click.echo(f"✅ JSON report written to {report_path}")
-        click.echo(output)
-        return output
-    elif output_format == 'human':
-        # Human-readable terminal output
-        total_waste_cost = sum(d.get('waste_cost', 0) for d in all_active_detections)
-        output = _format_human_readable(all_active_detections, total_waste_cost, traces, pricing_config.get('models', {}))
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(output)
-        click.echo(f"✅ Human-readable report written to {report_path}")
         click.echo(output)
         return output
     elif output_format == 'markdown':

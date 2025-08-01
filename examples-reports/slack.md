@@ -1,45 +1,39 @@
-🚨 **CrashLens Token Waste Report** 🚨
-📊 Analysis Date: 2025-07-30 13:59:34
+🚨 *CrashLens Token Waste Report* 🚨
+📊 *Analysis Date:* 2025-07-31 22:12:29
 
-| Metric | Value |
-|--------|-------|
-| Total AI Spend | $1.18 |
-| Total Potential Savings | $0.92 |
-| Wasted Tokens | 22,147 |
-| Issues Found | 87 |
-| Traces Analyzed | 156 |
+📋 *Report Summary:*
+• 💰 *Total AI Spend:* $0.09
+• 🔥 *Potential Savings:* $0.07
+• 🎯 *Wasted Tokens:* 1,414
+• ⚠️ *Issues Found:* 8
+• 📈 *Traces Analyzed:* 12
 
-❓ **Overkill Model** | 73 traces | $0.77 wasted | Fix: optimize usage
-   🎯 **Wasted tokens**: 18,812
-   🔗 **Traces** (68): trace_overkill_01, trace_norm_02, trace_fallback_success_01, trace_overkill_02, trace_overkill_03, +63 more
-   📄 **Samples**: "What is 2+2?...", "Draft a comprehensive business..."
+📢 *Fallback Failure* • 5 traces • $0.07 wasted
+   💡 *Fix:* remove redundant fallbacks
+   🎯 *Wasted tokens:* 1,275
+   🔗 *Traces (5):* `demo_fallback_01, demo_fallback_02, demo_fallback_03, demo_fallback_04, demo_fallback_05`
 
-📢 **Fallback Failure** | 7 traces | $0.08 wasted | Fix: remove redundant fallbacks
-   🎯 **Wasted tokens**: 1,330
-   🔗 **Traces** (7): trace_fallback_success_01, trace_fallback_success_02, trace_fallback_success_03, trace_fallback_success_04, trace_fallback_success_05, +2 more
+❓ *Overkill Model* • 2 traces • $0.0007 wasted
+   💡 *Fix:* optimize usage
+   🎯 *Wasted tokens:* 31
+   🔗 *Traces (2):* `demo_overkill_01, demo_overkill_02`
 
-⚡ **Fallback Storm** | 5 traces | $0.07 wasted | Fix: optimize model selection
-   🎯 **Wasted tokens**: 1,877
-   🔗 **Traces** (5): trace_fallback_failure_01, trace_fallback_failure_02, trace_fallback_failure_03, trace_fallback_failure_04, trace_fallback_failure_05
-   📄 **Samples**: "Write a Python script to analy...", "Create a function in Go to rev..."
-
-🔄 **Retry Loop** | 2 traces | $0.0001 wasted | Fix: exponential backoff
-   🎯 **Wasted tokens**: 128
-   🔗 **Traces** (2): trace_retry_loop_07, trace_retry_loop_10
-   📄 **Samples**: "What is the current time in To...", "What is the capital of India?..."
+🔄 *Retry Loop* • 1 traces • $0.0002 wasted
+   💡 *Fix:* exponential backoff
+   🎯 *Wasted tokens:* 108
+   🔗 *Traces (1):* `demo_retry_01`
 
 
-## Top Expensive Traces
+🏆 *Top Expensive Traces:*
+• #1 → `demo_norm_03` → gpt-4 → $0.03
+• #2 → `demo_norm_04` → gpt-4 → $0.02
+• #3 → `demo_fallback_05` → gpt-3.5-turbo → $0.02
 
-| Rank | Trace ID | Model | Cost |
-|------|----------|-------|------|
-| 1 | trace_norm_76 | gpt-4 | $0.09 |
-| 2 | trace_norm_65 | gpt-4 | $0.07 |
-| 3 | trace_norm_38 | gpt-4 | $0.06 |
+🤖 *Cost by Model:*
+• gpt-4 → $0.09 (99%)
+• gpt-3.5-turbo → $0.0012 (1%)
 
-## Cost by Model
-
-| Model | Cost | Percentage |
-|-------|------|------------|
-| gpt-4 | $1.16 | 98% |
-| gpt-3.5-turbo | $0.02 | 2% |
+💡 *Next Steps:*
+• Run `crashlens --detailed` for grouped JSON reports
+• Review trace patterns to optimize model routing
+• Implement suggested fixes to reduce token waste
