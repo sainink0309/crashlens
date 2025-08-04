@@ -1,27 +1,37 @@
 🚨 *CrashLens Token Waste Report* 🚨
-📊 *Analysis Date:* 2025-08-01 12:36:08
+📊 *Analysis Date:* 2025-08-04 22:59:53
 
 📋 *Report Summary:*
-• 💰 *Total AI Spend:* $859.52
-• 🔥 *Potential Savings:* $859.52
-• 🎯 *Wasted Tokens:* 24,555,498
-• ⚠️ *Issues Found:* 187
-• 📈 *Traces Analyzed:* 156
+• 💰 *Total AI Spend:* $0.09
+• 🔥 *Potential Savings:* $0.07
+• 🎯 *Wasted Tokens:* 1,414
+• ⚠️ *Issues Found:* 8
+• 📈 *Traces Analyzed:* 12
 
-🔄 *Retry Loop* • 187 traces • $859.52 wasted
+📢 *Fallback Failure* • 5 traces • $0.07 wasted
+   💡 *Fix:* remove redundant fallbacks
+   🎯 *Wasted tokens:* 1,275
+   🔗 *Traces (5):* `demo_fallback_01, demo_fallback_02, demo_fallback_03, demo_fallback_04, demo_fallback_05`
+
+❓ *Overkill Model* • 2 traces • $0.0007 wasted
+   💡 *Fix:* optimize usage
+   🎯 *Wasted tokens:* 31
+   🔗 *Traces (2):* `demo_overkill_01, demo_overkill_02`
+
+🔄 *Retry Loop* • 1 traces • $0.0002 wasted
    💡 *Fix:* exponential backoff
-   🎯 *Wasted tokens:* 24,555,498
-   🔗 *Traces (156):* `trace_norm_01, trace_overkill_01, trace_norm_02, trace_retry_loop_01, trace_norm_03, +151 more`
+   🎯 *Wasted tokens:* 108
+   🔗 *Traces (1):* `demo_retry_01`
 
 
 🏆 *Top Expensive Traces:*
-• #1 → `trace_norm_76` → gpt-4 → $65.78
-• #2 → `trace_norm_65` → gpt-4 → $52.60
-• #3 → `trace_norm_38` → gpt-4 → $44.10
+• #1 → `demo_norm_03` → gpt-4 → $0.03
+• #2 → `demo_norm_04` → gpt-4 → $0.02
+• #3 → `demo_fallback_05` → gpt-3.5-turbo → $0.02
 
 🤖 *Cost by Model:*
-• gpt-4 → $845.65 (98%)
-• gpt-3.5-turbo → $13.87 (2%)
+• gpt-4 → $0.09 (99%)
+• gpt-3.5-turbo → $0.0012 (1%)
 
 💡 *Next Steps:*
 • Run `crashlens --detailed` for grouped JSON reports

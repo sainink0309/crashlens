@@ -1,0 +1,41 @@
+{
+  "detector_type": "Overkill Model Detector",
+  "summary": {
+    "total_issues": 2,
+    "affected_traces": 2,
+    "total_waste_cost": 0.000651,
+    "total_waste_tokens": 31,
+    "models_involved": [
+      "gpt-4"
+    ]
+  },
+  "issues": [
+    {
+      "trace_id": "demo_overkill_01",
+      "problem": "Overkill: gpt-4 used for simple task (prompt starts with 'what is')",
+      "estimated_cost": 0.000273,
+      "waste_tokens": 13,
+      "severity": "medium",
+      "expensive_model": "gpt-4",
+      "suggested_model": "gpt-3.5-turbo"
+    },
+    {
+      "trace_id": "demo_overkill_02",
+      "problem": "Overkill: gpt-4 used for simple task (prompt starts with 'what is')",
+      "estimated_cost": 0.000378,
+      "waste_tokens": 18,
+      "severity": "medium",
+      "expensive_model": "gpt-4",
+      "suggested_model": "gpt-3.5-turbo"
+    }
+  ],
+  "suggestions": [
+    "Route simple prompts to cheaper models (e.g., gpt-3.5-turbo)",
+    "Implement prompt length-based model selection",
+    "Use GPT-4 only for complex reasoning tasks"
+  ],
+  "metadata": {
+    "generated_at": "2025-08-04T22:59:53.969516",
+    "detector_category": "overkill_model"
+  }
+}
